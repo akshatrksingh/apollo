@@ -91,8 +91,9 @@ Test goals:
 - an empty trajectory scores `0.0`
 - `no_collateral_damage` returns False when a non-allowed object changes, True when only allowed changes occur
 - `diff_keys` correctly reports a reaction-set change as a `messages` modification
+- isolation: the tool set registered for the agent contains ONLY Slack/Task tools; assert no registered tool name references verify/score/allowed/expected/ground-truth, and `WorkspaceState` exposes no attribute reaching `ALLOWED_CHANGES`, the verifier, the snapshot, the trajectory, or the score
 
-Auditor checklist: verifier reads state directly (not via tools); smoke verifier names the specific channel C001; logger captures every tool call including failed ones.
+Auditor checklist: verifier reads state directly (not via tools); smoke verifier names the specific channel C001; logger captures every tool call including failed ones; registered agent tools are Slack/Task only (grep the tool registration, confirm no grading symbol is reachable from a tool or from `WorkspaceState`).
 
 Human gate (SESSION 1 BOUNDARY): `[PROMPT]` human runs the smoke test end to end through the Harbor adapter with a real agent loop (cheap model is fine). Green (score 1.0 on a competent run, 0.0 on the stray-task run) = proceed. Red = stop, fix wiring before any task work.
 

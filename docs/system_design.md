@@ -17,6 +17,17 @@ harbor/     adapter: Task -> Harbor      STABLE
 - The verifier signature is fixed: `verify(state_before, state_after, trajectory) -> float` in `[0.0, 1.0]`. What is inside is task-specific.
 - The env never imports from `tasks/`. `tasks/` imports from `env/` and `verifiers/`.
 
+## Environment isolation (the agent cannot reach the reward)
+
+The single most important anti-reward-hacking property: the agent can observe and mutate the workspace and nothing else. It must never be able to read or write the grading machinery.
+
+- The agent's only capabilities are the registered Slack/Task tools over `WorkspaceState`. Nothing else is exposed.
+- These are NEVER exposed to the agent (not as a tool, not as a tool return value, not as a field reachable on `WorkspaceState`): the verifier, `ALLOWED_CHANGES`, any ground-truth / expected end-state, `episode_start`, the `state_before` snapshot, the trajectory log, and the score.
+- The verifier runs after the rollout (inside `score()`), never during it. It reads a harness-held deep copy (`state_before`) and the live final state by direct access, not through tools.
+- No shared mutable global between the tool layer and the verifier. `WorkspaceState` is the only shared object and it is harness-controlled; the snapshot is an independent deep copy.
+- `INSTRUCTION` is natural language and must not leak verifier field paths or load-bearing IDs. The agent discovers `T003` / `M007` through tools; the prompt never names them.
+- The tool-only function-calling boundary IS the sandbox. The target agent (Gemma 4 26B via OpenRouter) has no filesystem, shell, or network, so it cannot read `tasks/` or the verifier source. If any future agent is given code execution or shell, it must run inside a Harbor container; never grant raw file access in the same process that holds the grader.
+
 ## Directory layout
 
 ```

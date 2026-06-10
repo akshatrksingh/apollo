@@ -14,6 +14,7 @@ def verify(state_before: WorkspaceState,
 - Accesses state by direct attribute/dict access (`state_after.tasks["T003"]["status"]`). Not through the tool API. This keeps verifier bugs and agent bugs separable.
 - `episode_start = state_before.clock.current()`. No hardcoded timestamps.
 - Lives inside the task module; uses `verifiers/utils.py`.
+- Runs after the rollout only, in the harness `score()` step. The agent has no tool to call it and no field on `WorkspaceState` that reaches it, `ALLOWED_CHANGES`, or any ground-truth. See Environment isolation in system_design.md.
 
 ## Shared utilities  (`verifiers/utils.py`)
 

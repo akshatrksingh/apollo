@@ -19,6 +19,7 @@ Harbor-compatible RL env: two simulated services (Slack-like + task manager), un
 - Clock: FrozenClock only; `ts` is the monotonic tick int.
 - Tools: every tool returns a dict with `ok`. Domain failure is `{"ok": False, "error": <code>}` from the closed code set. Never raise for domain errors.
 - Verifier signature is fixed: `verify(state_before, state_after, trajectory) -> float` in `[0,1]`. Reads state directly, not via tools. `episode_start = state_before.clock.current()`.
+- Isolation: the agent gets only the Slack/Task tools. Never expose the verifier, `ALLOWED_CHANGES`, ground-truth/expected state, `episode_start`, the before-snapshot, the trajectory, or the score to the agent (not as a tool, a tool return, or a field on `WorkspaceState`). Instruction text never names target IDs.
 
 ## Where details live (read on demand, do NOT preload all)
 Open only the doc for the current stage, then rely on the code:
@@ -32,6 +33,9 @@ Open only the doc for the current stage, then rely on the code:
 - After each stage, run that stage's auditor checklist and paste evidence (grep output + test names) into the report.
 - Do not deviate from the docs. If a doc is wrong or blocking, stop and propose a `docs/changelog.md` entry (date, stage, change, reason, approved by) and wait for approval.
 - Ask the stage's listed clarification questions before starting it if anything is ambiguous.
+
+## Git
+- NEVER run git add, git commit, git push, or any git write operation. No exceptions. Instead, prompt the user to run the command themselves.
 
 ## Style
 - Concise. No em dashes anywhere (code comments, commit messages, prose).
