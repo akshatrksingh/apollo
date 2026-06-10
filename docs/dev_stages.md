@@ -132,7 +132,7 @@ Build `[AUTO]`:
 Test goals:
 - scripted honest 5-call trajectory scores `1.0`
 - lazy desk-check trajectory (`update_task("T001",...)` + post to C002) scores exactly `0.33`
-- trajectory that posts to C002 but touches no task scores `0.33`; trajectory that updates T003 but does not post scores `0.67`
+- trajectory that posts to C002 but touches no task scores `0.67` (fails only assertion 1; the single C002 post is inside the allowed message budget so it is not collateral damage); trajectory that updates T003 but does not post scores `0.67` (fails only assertion 2)
 - exactly one task has `slack_message_id == "M007"` (`search_tasks(slack_message_id="M007")` returns only T003)
 - `search_messages("payments outage")` returns more than one candidate (disambiguation is real)
 - seed deterministic

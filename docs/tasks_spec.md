@@ -118,7 +118,7 @@ Cheapest exploits + closure:
 | exploit | which assertions it fakes | why it does not reach 1.0 |
 |---|---|---|
 | update a guessed task to in_progress + post anything to C002, no search | 2 (and 1 only if it guesses T003) | assertion 1 names T003 specifically; with 6-8 tasks guessing is unlikely and pass^k averages luck out. Touching a non-T003 task trips assertion 3. |
-| post to C002 but never touch any task | 2 only | score capped at 0.33; partial credit surfaces the missing task mutation in loss analysis |
+| post to C002 but never touch any task | 2 and 3 | score 0.67; fails only assertion 1 (T003 untouched). The single C002 post consumes the allowed message budget, so it is not collateral damage. Partial credit surfaces the missing task mutation in loss analysis |
 | update T003 but forget to post | 1 (+3) | score 0.67; missing notification visible per-assertion |
 
 Note: `notification_posted` deliberately does NOT check message text content. Path-agnostic by design; the T003-specific assertion plus collateral damage carry discrimination. This tradeoff is desk-checked in `verifier_design.md` before any Gemma run.
