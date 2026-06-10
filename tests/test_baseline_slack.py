@@ -121,15 +121,15 @@ def test_search_finds_target():
 
 
 def test_no_action_scores_0_5():
-    """No actions: assertion1 False (no :eyes:), assertion2 True (nothing changed)."""
+    """No actions: assertion1 False (no :eyes:), assertion2 True (nothing changed). Binary scoring: not all pass -> 0.0."""
     state = _make_state()
     state_before = copy.deepcopy(state)
     score = verify(state_before, state, [])
-    assert score == 0.5
+    assert score == 0.0
 
 
 def test_wrong_emoji_scores_0_5():
-    """React with wrong emoji: assertion1 False, assertion2 True (M026.reactions allowed)."""
+    """React with wrong emoji: assertion1 False, assertion2 True (M026.reactions allowed). Binary scoring: not all pass -> 0.0."""
     state = _make_state()
     state_before = copy.deepcopy(state)
     slack = SlackService(state)
@@ -137,7 +137,7 @@ def test_wrong_emoji_scores_0_5():
     assert resp["ok"] is True
     score = verify(state_before, state, [])
     # assertion1 = False (:eyes: absent), assertion2 = True (M026.reactions is allowed field)
-    assert score == 0.5
+    assert score == 0.0
 
 
 def test_target_id_is_fixed():

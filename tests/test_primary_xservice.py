@@ -3,11 +3,11 @@
 Expected values derived from docs only, NOT from reading the implementation:
 - dev_stages.md Stage 5 test goals
 - tasks_spec.md Task 3 (3 assertions, honest 5-hop path, exploit table)
-- verifier_design.md (score = mean(assertions); desk-check lazy trajectory; AllowedChanges)
-- changelog.md 2026-06-10 (post-only corrected 0.33 -> 0.67)
+- verifier_design.md (desk-check lazy trajectory; AllowedChanges)
+- changelog.md 2026-06-10 (binary scoring: all-pass=1.0, else 0.0)
 - CLAUDE.md invariants + isolation rule
 
-Scoring contract (3 assertions -> {0.0, 0.33, 0.67, 1.0}):
+Scoring contract (3 assertions, binary: all pass = 1.0, else 0.0):
   a1 task_status_correct:  tasks["T003"]["status"] == "in_progress"
   a2 notification_posted:  top-level msg in C002 from current_user with ts > episode_start
   a3 no_collateral_damage: only ALLOWED_CHANGES diffs present
@@ -104,7 +104,7 @@ def test_lazy_deskcheck_trajectory_scores_0_33():
         assert p["ok"] is True, p
 
     score = _run(mutate)
-    assert abs(score - 1 / 3) < 0.01, f"expected ~0.33, got {score}"
+    assert score == 0.0, f"expected 0.0 (binary: not all assertions pass), got {score}"
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ def test_post_only_no_task_scores_0_67():
         assert p["ok"] is True, p
 
     score = _run(mutate)
-    assert abs(score - 2 / 3) < 0.01, f"expected ~0.67, got {score}"
+    assert score == 0.0, f"expected 0.0 (binary: not all assertions pass), got {score}"
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ def test_update_t003_no_post_scores_0_67():
         assert r["ok"] is True, r
 
     score = _run(mutate)
-    assert abs(score - 2 / 3) < 0.01, f"expected ~0.67, got {score}"
+    assert score == 0.0, f"expected 0.0 (binary: not all assertions pass), got {score}"
 
 
 # ---------------------------------------------------------------------------
@@ -230,14 +230,14 @@ def test_allowed_changes_matches_spec():
 
 
 def test_no_action_scores_0_33():
-    """Nothing done: a1 False, a2 False, a3 True (no diff)."""
+    """Nothing done: a1 False, a2 False, a3 True (no diff). Binary scoring: not all pass -> 0.0."""
     score = _run(lambda slack, tasks: None)
-    assert abs(score - 1 / 3) < 0.01, f"expected ~0.33, got {score}"
+    assert score == 0.0, f"expected 0.0 (binary: not all assertions pass), got {score}"
 
 
 def test_thread_reply_does_not_satisfy_notification():
     """A reply (parent_id set) in C002 must NOT count as the notification (a2 False).
-    update T003 + thread-reply => a1 True, a2 False, a3 True => 0.67, not 1.0.
+    update T003 + thread-reply => a1 True, a2 False, a3 True => 0.0 (binary), not 1.0.
     """
     def mutate(slack, tasks):
         r = tasks.update_task(TARGET_TASK, status="in_progress")
@@ -246,7 +246,7 @@ def test_thread_reply_does_not_satisfy_notification():
         assert p["ok"] is True, p
 
     score = _run(mutate)
-    assert abs(score - 2 / 3) < 0.01, f"thread reply should not satisfy a2; got {score}"
+    assert score == 0.0, f"thread reply should not satisfy a2; got {score}"
 
 
 def test_wrong_task_plus_post_to_c002_caps_below_1():
