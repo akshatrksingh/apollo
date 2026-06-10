@@ -160,4 +160,4 @@ def verify(
     trajectory: list,
 ) -> float:
     results = assertions(state_before, state_after, trajectory)
-    return sum(1.0 for _, passed in results if passed) / 3.0
+    return 1.0 if all(passed for _, passed in results) else 0.0
