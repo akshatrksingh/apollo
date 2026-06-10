@@ -199,15 +199,9 @@ def run_one_trial(
     return record
 
 
-def _write_transcript(
-    record: dict, transcripts_dir: str, model: str, trial: int
-) -> str:
-    Path(transcripts_dir).mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    fname = (
-        f"{record['task']}_{_sanitize_model(model)}_trial{trial}_{stamp}.json"
-    )
-    path = Path(transcripts_dir) / fname
+def _write_transcript(record: dict, run_dir: Path, trial: int) -> str:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / f"trial{trial}.json"
     record = dict(record)
     record["created_at"] = datetime.now(timezone.utc).isoformat()
     with open(path, "w", encoding="utf-8") as fh:
@@ -227,11 +221,17 @@ def run_trials(
     if task_module is None:
         raise ValueError(f"unknown task: {task_id}")
 
+    # One subfolder per run groups its N trial transcripts and makes cross-run
+    # collisions impossible. Microsecond stamp so two runs in the same second
+    # of the same task+model still get distinct directories.
+    run_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
+    run_dir = Path(transcripts_dir) / f"{task_id}_{_sanitize_model(model)}_{run_stamp}"
+
     records: list[dict] = []
     for n in range(1, trials + 1):
         record = run_one_trial(task_module, model, client, max_turns)
         record["trial"] = n
-        _write_transcript(record, transcripts_dir, model, n)
+        _write_transcript(record, run_dir, n)
         records.append(record)
 
     scores = [r["score"] for r in records]

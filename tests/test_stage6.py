@@ -320,16 +320,17 @@ def test_transcript_files_match_name_pattern(tmp_path):
         max_turns=10,
         transcripts_dir=str(tmp_path),
     )
-    files = sorted(Path(tmp_path).glob("*.json"))
-    assert len(files) == 2
-    # <task>_<model_sanitized>_trial<N>_<UTC>.json with "/" sanitized to "_".
-    names = [f.name for f in files]
-    assert any(
-        n.startswith(f"{PRIMARY}_test_model_trial1_") and n.endswith(".json")
-        for n in names
-    )
-    assert any("trial2_" in n for n in names)
-    assert all("test/model" not in n for n in names)
+    # One subfolder per run: <task>_<model_sanitized>_<UTC+micros>Z/trialN.json.
+    run_dirs = [p for p in Path(tmp_path).iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+    # Folder carries task/model/timestamp; "/" sanitized to "_".
+    assert run_dir.name.startswith(f"{PRIMARY}_test_model_")
+    assert "/" not in run_dir.name
+    assert "test/model" not in run_dir.name
+    # Exactly `trials` files named trial1.json .. trialN.json.
+    files = sorted(run_dir.glob("trial*.json"))
+    assert [f.name for f in files] == ["trial1.json", "trial2.json"]
 
 
 def test_transcript_contents_have_instruction_calls_score_assertions(tmp_path):
@@ -341,7 +342,11 @@ def test_transcript_contents_have_instruction_calls_score_assertions(tmp_path):
         max_turns=10,
         transcripts_dir=str(tmp_path),
     )
-    f = sorted(Path(tmp_path).glob("*.json"))[0]
+    run_dirs = [p for p in Path(tmp_path).iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    files = sorted(run_dirs[0].glob("trial*.json"))
+    assert [f.name for f in files] == ["trial1.json"]
+    f = files[0]
     data = json.loads(f.read_text())
     assert isinstance(data["instruction"], str) and data["instruction"]
     assert isinstance(data["score"], (int, float))
@@ -370,8 +375,11 @@ def test_transcript_serializes_sets_as_lists_not_python_sets(tmp_path):
         max_turns=10,
         transcripts_dir=str(tmp_path),
     )
-    f = sorted(Path(tmp_path).glob("*.json"))[0]
-    raw = f.read_text()
+    run_dirs = [p for p in Path(tmp_path).iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    files = sorted(run_dirs[0].glob("trial*.json"))
+    assert [f.name for f in files] == ["trial1.json"]
+    raw = files[0].read_text()
     # JSON cannot encode a Python set; valid load proves no set survived.
     data = json.loads(raw)
 
