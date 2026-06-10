@@ -364,9 +364,7 @@ def run_trials(
     run_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
     run_dir = Path(transcripts_dir) / f"{task_id}_{_sanitize_model(model)}_{run_stamp}"
 
-    harbor_for_schemas = ApolloHarborTask(task_module)
-    harbor_for_schemas.setup()
-    tool_schemas = [tool.schema for tool in harbor_for_schemas.tools.values()]
+    tool_schemas = ApolloHarborTask.static_tool_schemas()
 
     records: list[dict] = []
     for n in range(1, trials + 1):
