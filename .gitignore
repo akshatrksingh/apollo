@@ -7,6 +7,7 @@ __pycache__/
 runs/
 results/
 trajectories/
+transcripts/
 # throwaway scratch (gate runners, experiments)
 scratch/
 .DS_Store

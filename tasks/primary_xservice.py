@@ -126,18 +126,18 @@ def seed(state: WorkspaceState) -> None:
     )
 
 
-def verify(
+def assertions(
     state_before: WorkspaceState,
     state_after: WorkspaceState,
     trajectory: list,
-) -> float:
+) -> list[tuple[str, bool]]:
     episode_start = state_before.clock.current()
 
-    assertion1 = field_equals(
+    a1 = field_equals(
         state_after, ("tasks", "T003", "status"), "in_progress"
     )
 
-    assertion2 = message_exists_in(
+    a2 = message_exists_in(
         state_after,
         "C002",
         author=state_after.current_user,
@@ -145,6 +145,19 @@ def verify(
         top_level=True,
     )
 
-    assertion3 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
+    a3 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
 
-    return (float(assertion1) + float(assertion2) + float(assertion3)) / 3.0
+    return [
+        ("task_status_correct", a1),
+        ("notification_posted", a2),
+        ("no_collateral_damage", a3),
+    ]
+
+
+def verify(
+    state_before: WorkspaceState,
+    state_after: WorkspaceState,
+    trajectory: list,
+) -> float:
+    results = assertions(state_before, state_after, trajectory)
+    return sum(1.0 for _, passed in results if passed) / 3.0

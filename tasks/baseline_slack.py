@@ -59,17 +59,29 @@ def seed(state: WorkspaceState) -> None:
     _msg("C002", "U002", "INC-009: Cert renewal initiated, will auto-deploy on completion.")
 
 
+def assertions(
+    state_before: WorkspaceState,
+    state_after: WorkspaceState,
+    trajectory: list,
+) -> list[tuple[str, bool]]:
+    # assertion1: target message has :eyes: reaction from the acting user
+    target = state_after.messages.get(TARGET_ID, {})
+    target_reactions = target.get("reactions", {})
+    a1 = state_after.current_user in target_reactions.get(":eyes:", set())
+
+    # assertion2: nothing changed outside ALLOWED_CHANGES
+    a2 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
+
+    return [
+        ("target_reacted", a1),
+        ("no_collateral_damage", a2),
+    ]
+
+
 def verify(
     state_before: WorkspaceState,
     state_after: WorkspaceState,
     trajectory: list,
 ) -> float:
-    # assertion1: target message has :eyes: reaction from the acting user
-    target = state_after.messages.get(TARGET_ID, {})
-    target_reactions = target.get("reactions", {})
-    assertion1 = state_after.current_user in target_reactions.get(":eyes:", set())
-
-    # assertion2: nothing changed outside ALLOWED_CHANGES
-    assertion2 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
-
-    return (float(assertion1) + float(assertion2)) / 2.0
+    results = assertions(state_before, state_after, trajectory)
+    return sum(1.0 for _, passed in results if passed) / 2.0

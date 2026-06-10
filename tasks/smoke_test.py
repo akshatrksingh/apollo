@@ -18,11 +18,11 @@ def seed(state: WorkspaceState) -> None:
     pass
 
 
-def verify(
+def assertions(
     state_before: WorkspaceState,
     state_after: WorkspaceState,
     trajectory: list,
-) -> float:
+) -> list[tuple[str, bool]]:
     episode_start = state_before.clock.current()
 
     posted = message_exists_in(
@@ -34,4 +34,16 @@ def verify(
     )
     clean = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
 
-    return 1.0 if (posted and clean) else 0.0
+    return [
+        ("message_posted", posted),
+        ("no_collateral_damage", clean),
+    ]
+
+
+def verify(
+    state_before: WorkspaceState,
+    state_after: WorkspaceState,
+    trajectory: list,
+) -> float:
+    results = assertions(state_before, state_after, trajectory)
+    return 1.0 if all(passed for _, passed in results) else 0.0
