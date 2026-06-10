@@ -13,6 +13,7 @@ Test goals are written as verifiable conditions. The agent generates the actual 
 The five docs in `docs/` are the frozen contract. The agent reads all five before writing anything and treats `system_design.md` field names, signatures, and the verifier interface as immutable. Deviations require a `changelog.md` entry approved by the human.
 
 Clarification questions before Stage 1:
+
 - Is the Python entrypoint a package (`apollo/`) or flat module layout? (default: package per the layout in system_design.md)
 - Confirm `current_user == "U004"` and that the agent user is seeded by `base_workspace()`.
 
@@ -21,13 +22,15 @@ Clarification questions before Stage 1:
 ## Stage 1 — Env core: state, clock, ids
 
 Build `[AUTO]`:
+
 - `env/clock.py` FrozenClock (`tick`, `next`, `current`, `to_datetime`)
 - `env/ids.py` `next_id(state, prefix)` -> `f"{prefix}{n:03d}"`, bumps `_counters`
 - `env/state.py` WorkspaceState + entity TypedDicts per system_design.md
 
 Test goals (passing = all true):
+
 - `FrozenClock().next()` returns strictly increasing ints starting at 1; `current()` does not increment
-- `to_datetime(0)` equals the base ISO; `to_datetime(2)` equals base + 2*tick_seconds
+- `to_datetime(0)` equals the base ISO; `to_datetime(2)` equals base + 2\*tick_seconds
 - `next_id(state,"M")` on a state with `_counters["M"]==4` returns `"M005"` and sets counter to 5
 - a WorkspaceState round-trips through `copy.deepcopy` with no shared mutable refs (mutating the copy's `messages` does not touch the original)
 - grep: no `datetime.now(`, no `import random`, no `import uuid` in `env/`
@@ -37,6 +40,7 @@ Auditor checklist: ids are prefix + zero-padded counter; clock has no wall-clock
 Human gate: none yet (continues into Stage 2 in the same session).
 
 Clarification questions before starting:
+
 - Should `ts` be the raw tick int (per system_design.md) confirmed, or a datetime string? (default: tick int)
 
 ---
@@ -44,6 +48,7 @@ Clarification questions before starting:
 ## Stage 2 — Services + base seed
 
 Build `[AUTO]`:
+
 - `env/slack.py` SlackService: all 10 tools with exact return/error shapes from system_design.md
 - `env/task_service.py` TaskService: all 6 tools with exact return/error shapes
 - `env/seed.py` `base_workspace()` building the channel map from tasks_spec.md and the base density (5 users, 5 channels, background messages)
@@ -51,6 +56,7 @@ Build `[AUTO]`:
 `[PLACEHOLDER]`: exact background message texts, persona names/emails, exact non-load-bearing message ids. The channel map (C001-C005, names, privacy, membership) is fixed, not placeholder.
 
 Test goals:
+
 - read tools never mutate: snapshot state, call every read tool, assert `diff_keys` empty
 - every domain error returns `{"ok": False, "error": <code>}` with a code from the closed set; no exceptions raised for domain errors
 - `post_message` to a nonexistent channel -> `channel_not_found`; to C005 (non-member) -> `not_authorized`
@@ -67,6 +73,7 @@ Auditor checklist: no `random`/`time`/`uuid` imports; all errors return dicts; s
 Human gate: none (continues into Stage 3).
 
 Clarification questions before starting:
+
 - For `get_channel_messages`/`post_message` on a non-member channel, confirm `not_authorized` vs `channel_not_found` (default: `not_authorized`; existence is not hidden)
 - Cursor format: opaque string encoding offset, confirmed acceptable?
 
@@ -75,6 +82,7 @@ Clarification questions before starting:
 ## Stage 3 — Harbor adapter + trajectory logger + smoke test
 
 Build `[AUTO]`:
+
 - `harbor/trajectory.py` ToolCall schema + TrajectoryLogger (records tool, args, result, optional reasoning)
 - `harbor/adapter.py` ApolloHarborTask (setup snapshots before-state and registers bound tools as callables + JSON schemas; run logs every call; score calls `task.verify`)
 - `tasks/registry.py` discovery of task modules
@@ -84,6 +92,7 @@ Build `[AUTO]`:
 `[PLACEHOLDER]`: smoke test instruction wording.
 
 Test goals:
+
 - registry discovers `smoke_test` and exposes its required symbols
 - adapter `setup()` produces `state_before` that is a deep copy (independent) of the live state
 - a scripted correct trajectory (`list_channels` then `post_message("C001","env check ok")`) scores `1.0`
@@ -102,11 +111,13 @@ Human gate (SESSION 1 BOUNDARY): `[PROMPT]` human runs the smoke test end to end
 ## Stage 4 — Baseline task (saturated)
 
 Build `[AUTO]`:
+
 - `tasks/baseline_slack.py`: seed delta (pagination-forcing #incidents messages + target `M_DBLATENCY` + decoys), instruction, 2-assertion verifier, ALLOWED_CHANGES per tasks_spec.md
 
 `[PLACEHOLDER]`: target message id once chosen becomes fixed; decoy contents; exact message texts; the ~70% expectation.
 
 Test goals:
+
 - scripted correct trajectory (reach page 2 / search, then react to `M_DBLATENCY`) scores `1.0`
 - scripted trajectory that reacts to a decoy scores `0.0` (assertion 1 false + collateral damage)
 - target message is NOT on page 1 of `get_channel_messages("C002")` (pagination is actually required)
@@ -117,6 +128,7 @@ Auditor checklist: assertion names the exact target id; ALLOWED_CHANGES restrict
 Human gate: none (continue into Stage 5).
 
 Clarification questions before starting:
+
 - Which seeded user is the engineer author of the target, and is the target guaranteed off page 1? (confirm against base density)
 
 ---
@@ -124,12 +136,14 @@ Clarification questions before starting:
 ## Stage 5 — Primary task (unsaturated) + desk-check
 
 Build `[AUTO]`:
+
 - `tasks/primary_xservice.py`: seed delta (M007 + thread replies + manager decoy; T003 linked via `slack_message_id="M007"`; 6-8 tasks with distractor links), instruction, 3-assertion verifier, ALLOWED_CHANGES per tasks_spec.md
 - `[AUTO]` run the reward-hacking desk-check from verifier_design.md and record the lazy-trajectory score in the build report
 
 `[PLACEHOLDER]`: all message/task texts; decoy specifics; the 25-45% expectation. Load-bearing and fixed: `M007`, `T003`, the `slack_message_id` link, channel C002, the three assertions.
 
 Test goals:
+
 - scripted honest 5-call trajectory scores `1.0`
 - lazy desk-check trajectory (`update_task("T001",...)` + post to C002) scores exactly `0.33`
 - trajectory that posts to C002 but touches no task scores `0.67` (fails only assertion 1; the single C002 post is inside the allowed message budget so it is not collateral damage); trajectory that updates T003 but does not post scores `0.67` (fails only assertion 2)
@@ -148,15 +162,18 @@ Human gate (SESSION 2 BOUNDARY): `[PROMPT]` human supplies OpenRouter access and
 ## Stage 6 — Trials, reference run, analysis scaffolding
 
 Build `[AUTO]`:
-- `runner/run_trials.py`: run N trials per task, log per trial every tool call/args/result/reasoning, final score, and per-assertion booleans; aggregate pass^k
+
+- `runner/run_trials.py`: run N trials per task (fresh setup() per trial, no state carryover); per trial log every tool call/args/result/reasoning, final score, and per-assertion booleans; persist each trial as a transcript to transcripts/ (gitignored) named <task>_<model>\_trial<N>_<UTC>.json; aggregate pass^k
 - `[AUTO]` one reference run with a stronger model (Claude Sonnet or GPT-4o), reference trajectory only, not a benchmark sweep
 
 `[PLACEHOLDER]`: N (default 5), choice of reference model.
 
 Test goals:
+
 - runner emits, per trial, a structured record containing tool calls, per-assertion booleans, and total score
 - aggregate report shows score distribution and pass^k across trials
 - a forced-failure stub trajectory is logged with the failing assertion identified
+- each trial writes a transcript file to transcripts/ with the documented name pattern, containing instruction, ordered tool calls/args/results, final score, and the 3 per-assertion booleans
 
 Human gate (SESSION 3 BOUNDARY): `[PROMPT]` human reads trajectories, confirms the failure pattern matches a hypothesis in Section G (context drop at the cross-service hop is the lead hypothesis), then writes the loss analysis and client update. The agent may draft `[PROMPT]`, but the human finalizes wording (no AI slop, no em dashes).
 
