@@ -64,12 +64,9 @@ A field is "modified" when the value differs under the normalization rules below
 | reactions | set equality per emoji | order irrelevant, membership is the signal |
 | `updated_at` / `edited_at` | treated as expected churn when the parent field legitimately changed; listed in ALLOWED_CHANGES | avoids false collateral-damage hits |
 
-## Partial credit
+## Scoring
 
-```python
-score = sum(1.0 for a in assertions if a) / len(assertions)
-```
-2 assertions -> `{0.0, 0.5, 1.0}`. 3 assertions -> `{0.0, 0.33, 0.67, 1.0}`. Equal weights. Each assertion must check a DIFFERENT aspect (a state field, a posting, collateral damage), so the vector of assertion results is the loss-analysis signal. The runner logs per-assertion booleans, not just the mean.
+Tasks use binary scoring: `score = 1.0 if all(assertions) else 0.0`. Per-assertion booleans are logged in every transcript for loss analysis. Equal-weighted partial credit was used in Stages 1-5 but is excluded from all post-Stage-6 comparisons (see changelog 2026-06-10 binary-scoring entry).
 
 ## AllowedChanges schema + collateral damage pattern
 
@@ -89,21 +86,47 @@ AllowedChanges = {
 
 So "update T003 status + post one message to C002" passes; "also delete T005" or "edit M002" fails.
 
-## Desk-check exploit trajectory (primary task, run before any Gemma run)
+## Desk-check exploit trajectories (primary task, re-run before any Gemma run)
 
-Walk the verifier by hand against a deliberately lazy trajectory:
+Scoring is binary: 1.0 iff all 4 assertions pass, else 0.0.
 
+**Lazy desk-check** (guesses wrong task, posts):
 ```
 trajectory = [ update_task("T001", status="in_progress"),   # guessed, wrong task
                post_message("C002", "done") ]
 ```
-Expected scoring:
-- assertion 1 task_status_correct: `tasks["T003"].status == "in_progress"` -> False (T003 untouched)
-- assertion 2 notification_posted: message in C002 after start -> True
-- assertion 3 no_collateral_damage: T001 modified, not in ALLOWED_CHANGES -> False
-- score = 1/3 = 0.33
+- a1 task_status_correct: state_before T003.status=="todo" True, state_after T003.status=="in_progress" False -> False
+- a2 notification_posted: top-level C002 post -> True
+- a3 no_collateral_damage: T001 modified, not in ALLOWED_CHANGES -> False
+- a4 cross_service_link_used: no search_tasks(slack_message_id="M007") before update_task -> False
+- score = 0.0 (binary: not all pass)
 
-Pass condition for the check: lazy trajectory scores < 1.0 (here 0.33). If it scored 1.0, the assertions are too loose. This 10-minute check is cheaper than discovering reward hacking after the runs. `[Re-run this desk-check whenever an assertion or ALLOWED_CHANGES changes.]`
+**Shortcut desk-check** (updates T003 and posts, but bypasses the M007 link):
+```
+trajectory = [ update_task("T003", status="in_progress"),
+               post_message("C002", "done") ]
+```
+- a1: state_before=="todo" True AND state_after=="in_progress" True -> True
+- a2: top-level C002 post -> True
+- a3: T003.status+updated_at changed (allowed), one C002 message added (allowed) -> True
+- a4: no search_tasks(slack_message_id="M007") before update_task -> False
+- score = 0.0
+
+**Honest cross-service desk-check**:
+```
+trajectory = [ search_messages("payments outage"),
+               get_thread("M007"),
+               search_tasks(slack_message_id="M007"),   # cross-service link
+               update_task("T003", status="in_progress"),
+               post_message("C002", "status update") ]
+```
+- a1: True (T003: todo -> in_progress)
+- a2: True (top-level C002 post)
+- a3: True (only allowed changes)
+- a4: search_tasks(slack_message_id="M007") at index 2, before update_task at index 3 -> True
+- score = 1.0
+
+Pass condition: shortcut scores 0.0, honest scores 1.0. `[Re-run this desk-check whenever an assertion, ALLOWED_CHANGES, or T003 seed text changes.]`
 
 ## LLM-judge decision rule
 

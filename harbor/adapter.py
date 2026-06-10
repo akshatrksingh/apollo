@@ -55,7 +55,13 @@ _SLACK_SCHEMAS = {
     ),
     "add_reaction": _schema(
         "add_reaction",
-        {"message_id": {"type": "string"}, "emoji": {"type": "string"}},
+        {
+            "message_id": {"type": "string"},
+            "emoji": {
+                "type": "string",
+                "description": "Emoji name with or without surrounding colons, e.g. 'eyes' or ':eyes:'. Both forms are accepted.",
+            },
+        },
         ["message_id", "emoji"],
     ),
     "create_channel": _schema(
@@ -141,6 +147,11 @@ class ApolloHarborTask:
         self.tools: dict[str, Tool] = {}
         self.logger = TrajectoryLogger()
 
+    @staticmethod
+    def static_tool_schemas() -> list[dict]:
+        """Return all tool schemas without requiring setup() or a seeded workspace."""
+        return [s for s in {**_SLACK_SCHEMAS, **_TASK_SCHEMAS}.values()]
+
     def setup(self) -> None:
         state = base_workspace()
         self.task.seed(state)
@@ -171,7 +182,7 @@ class ApolloHarborTask:
             logged_args = dict(kwargs)
             if args:
                 logged_args["_positional"] = list(args)
-            logger.log(name, logged_args, result, _reasoning)
+            logger.log(name, logged_args, copy.deepcopy(result), _reasoning)
             return result
 
         return call

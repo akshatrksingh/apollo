@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
+from harbor.adapter import ApolloHarborTask
 from runner.run_trials import (
     AgentMessage,
     ToolCallRequest,
@@ -165,6 +166,7 @@ def test_run_one_trial_honest_all_three_assertions_true():
         "task_status_correct": True,
         "notification_posted": True,
         "no_collateral_damage": True,
+        "cross_service_link_used": True,
     }
 
 
@@ -199,6 +201,7 @@ def test_run_one_trial_record_has_numeric_score_and_assertion_names():
         "task_status_correct",
         "notification_posted",
         "no_collateral_damage",
+        "cross_service_link_used",
     }
 
 
@@ -216,6 +219,7 @@ def test_run_one_trial_lazy_identifies_failing_assertions():
         "task_status_correct": False,
         "notification_posted": True,
         "no_collateral_damage": False,
+        "cross_service_link_used": False,
     }
 
 
@@ -420,8 +424,8 @@ def test_transcript_contents_have_instruction_calls_score_assertions(tmp_path):
     ]
     for c in data["tool_calls"]:
         assert "args" in c and "result" in c
-    # exactly 3 per-assertion booleans for the primary task
-    assert len(data["assertions"]) == 3
+    # exactly 4 per-assertion booleans for the primary task
+    assert len(data["assertions"]) == 4
     for a in data["assertions"]:
         assert isinstance(a["passed"], bool)
 
@@ -885,3 +889,44 @@ def test_two_independent_trials_both_score_1_0():
     r2 = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)
     assert r1["score"] == 1.0
     assert r2["score"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# BUG-01: trajectory logger deep-copies results at call time
+# ---------------------------------------------------------------------------
+
+
+def test_logged_result_is_call_time_snapshot_not_retroactively_mutated():
+    """BUG-01: logged result for get_task must show pre-mutation value after update_task."""
+    harbor = ApolloHarborTask(get_task(PRIMARY))
+    harbor.setup()
+    tools = harbor._logged_tools()
+
+    # Log a read: T003.status is "todo" at this point.
+    tools["get_task"](task_id="T003")
+
+    # Mutate T003 in live state.
+    tools["update_task"](task_id="T003", status="in_progress")
+
+    # The FIRST logged call must still carry the pre-mutation value.
+    first_logged = harbor.logger.trajectory[0]
+    assert first_logged["tool"] == "get_task"
+    assert first_logged["result"]["task"]["status"] == "todo"
+
+
+# ---------------------------------------------------------------------------
+# BUG-07: static_tool_schemas requires no setup or seeded workspace
+# ---------------------------------------------------------------------------
+
+
+def test_static_tool_schemas_requires_no_setup():
+    """BUG-07: tool schemas are available without calling setup() or seeding a workspace."""
+    schemas = ApolloHarborTask.static_tool_schemas()
+    assert isinstance(schemas, list)
+    assert len(schemas) > 0
+    assert all(isinstance(s, dict) for s in schemas)
+    # verify a representative tool is present
+    names = {s["name"] for s in schemas}
+    assert "search_tasks" in names
+    assert "add_reaction" in names
+    assert "post_message" in names

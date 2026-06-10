@@ -166,3 +166,14 @@ def test_target_reachable_on_page_2():
     assert page2["ok"] is True
     page2_ids = [m["id"] for m in page2["messages"]]
     assert TARGET_ID in page2_ids
+
+
+def test_reaction_without_colons_scores_1_0():
+    """BUG-05: emoji without surrounding colons must work identically to with colons."""
+    state = _make_state()
+    state_before = copy.deepcopy(state)
+    slack = SlackService(state)
+    resp = slack.add_reaction(TARGET_ID, "eyes")  # no colons
+    assert resp["ok"] is True
+    score = verify(state_before, state, [])
+    assert score == 1.0

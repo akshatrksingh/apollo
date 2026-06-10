@@ -2,15 +2,16 @@
 
 Expected values derived from docs only, NOT from reading the implementation:
 - dev_stages.md Stage 5 test goals
-- tasks_spec.md Task 3 (3 assertions, honest 5-hop path, exploit table)
+- tasks_spec.md Task 3 (4 assertions, honest 5-hop path, exploit table)
 - verifier_design.md (desk-check lazy trajectory; AllowedChanges)
 - changelog.md 2026-06-10 (binary scoring: all-pass=1.0, else 0.0)
 - CLAUDE.md invariants + isolation rule
 
-Scoring contract (3 assertions, binary: all pass = 1.0, else 0.0):
-  a1 task_status_correct:  tasks["T003"]["status"] == "in_progress"
-  a2 notification_posted:  top-level msg in C002 from current_user with ts > episode_start
-  a3 no_collateral_damage: only ALLOWED_CHANGES diffs present
+Scoring contract (4 assertions, binary: all pass = 1.0, else 0.0):
+  a1 task_status_correct:       tasks["T003"]["status"] was "todo" before, is "in_progress" after
+  a2 notification_posted:       top-level msg in C002 from current_user with ts > episode_start
+  a3 no_collateral_damage:      only ALLOWED_CHANGES diffs present
+  a4 cross_service_link_used:   search_tasks(slack_message_id="M007") before first update_task
 
 episode_start = state_before.clock.current() captured from the deepcopy taken
 AFTER seed() runs. Mutating calls run on the live state; verify() diffs the two.
@@ -85,7 +86,14 @@ def test_honest_5_call_trajectory_scores_1_0():
     r5 = slack.post_message(INCIDENTS_CHANNEL, "payments outage status: mitigating")
     assert r5["ok"] is True, r5
 
-    score = verify(before, state, [])
+    trajectory = [
+        {"tool": "search_messages", "args": {"query": "payments outage"}, "result": r1, "reasoning": None},
+        {"tool": "get_thread", "args": {"message_id": INCIDENT_ROOT}, "result": r2, "reasoning": None},
+        {"tool": "search_tasks", "args": {"slack_message_id": INCIDENT_ROOT}, "result": r3, "reasoning": None},
+        {"tool": "update_task", "args": {"task_id": TARGET_TASK, "status": "in_progress"}, "result": r4, "reasoning": None},
+        {"tool": "post_message", "args": {"channel_id": INCIDENTS_CHANNEL, "text": "payments outage status: mitigating"}, "result": r5, "reasoning": None},
+    ]
+    score = verify(before, state, trajectory)
     assert score == 1.0
 
 
@@ -259,3 +267,43 @@ def test_wrong_task_plus_post_to_c002_caps_below_1():
 
     score = _run(mutate)
     assert score < 1.0
+
+
+# ---------------------------------------------------------------------------
+# BUG-04: shortcut path (no M007 link) must score 0.0
+# ---------------------------------------------------------------------------
+
+
+def test_shortcut_bypasses_link_scores_0_0():
+    """BUG-04: Agent updates T003 and posts without search_tasks(slack_message_id='M007').
+    a1=T, a2=T, a3=T, a4=F (no link used) -> binary 0.0."""
+    state = _make_state()
+    before = _snapshot(state)
+    tasks_svc = TaskService(state)
+    slack = SlackService(state)
+
+    r1 = tasks_svc.update_task(TARGET_TASK, status="in_progress")
+    assert r1["ok"] is True, r1
+    r2 = slack.post_message(INCIDENTS_CHANNEL, "working on it")
+    assert r2["ok"] is True, r2
+
+    # Trajectory with update_task but NO search_tasks(slack_message_id="M007") before it
+    trajectory = [
+        {"tool": "update_task", "args": {"task_id": TARGET_TASK, "status": "in_progress"}, "result": r1, "reasoning": None},
+        {"tool": "post_message", "args": {"channel_id": INCIDENTS_CHANNEL, "text": "working on it"}, "result": r2, "reasoning": None},
+    ]
+    score = verify(before, state, trajectory)
+    assert score == 0.0, f"shortcut path (no M007 link used) must score 0.0, got {score}"
+
+
+def test_t003_not_findable_by_topic_keywords():
+    """BUG-04: text search on M007-derived keywords must NOT find T003."""
+    state = _make_state()
+    tasks_svc = TaskService(state)
+    for query in ("payments outage", "checkout", "5xx", "payment", "outage"):
+        res = tasks_svc.search_tasks(query=query)
+        assert res["ok"] is True
+        ids = [t["id"] for t in res["tasks"]]
+        assert TARGET_TASK not in ids, (
+            f"search_tasks(query={query!r}) must not return T003; shortcut must fail"
+        )

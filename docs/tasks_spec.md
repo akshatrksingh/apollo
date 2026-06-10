@@ -87,7 +87,7 @@ INSTRUCTION:
 Seed delta (load-bearing parts are fixed; text is `[PLACEHOLDER]`):
 - C002 (#incidents) seeded so a `search_messages("payments outage")` returns >1 hit, only one of which is the real incident. Real incident root message `M007` `[id fixed]` authored by an `engineer`. Decoy: a `manager` message also mentioning "payments" / "outage" (e.g. a forwarded summary) `[PLACEHOLDER]`. Disambiguation requires `get_thread("M007")` to confirm replies describe the active outage.
 - `M007` has thread replies (children with `parent_id == "M007"`) giving context `[PLACEHOLDER]`.
-- Task `T003` `[id fixed]`: title/description about the payments outage, `assignee` = some engineer, `status == "todo"`, `slack_message_id == "M007"`. This is the only task carrying `slack_message_id == "M007"`.
+- Task `T003` `[id fixed]`: title = `"Stabilize the PYMT-SVC component"`, description = `"PYMT-SVC dependency graph has a fault. Identify the degraded node and mitigate."`, `assignee` = some engineer, `status == "todo"`, `slack_message_id == "M007"`. Title and description contain NO keyword derivable from M007's text or the instruction (no "payments", "outage", "checkout", "5xx", "payment", "gateway", "failing", "incident", "service"), so `search_tasks(query=...)` cannot find T003; the agent must use `search_tasks(slack_message_id="M007")`. This is the only task carrying `slack_message_id == "M007"`.
 - Distractor tasks: 6-8 total tasks, 2-3 carrying a `slack_message_id` pointing at OTHER messages, mixed statuses/assignees, so guessing `T003` is statistically unlikely.
 
 Minimum honest path (5 hops):
@@ -99,12 +99,13 @@ Minimum honest path (5 hops):
 
 Gemma failure point: step 3. After `get_thread` returns replies, the model drops `M007` and either calls `update_task` on a guessed task id or stops (describes the action instead of calling it).
 
-Verifier assertions (3 assertions -> score in `{0.0, 0.33, 0.67, 1.0}`):
+Verifier assertions (4 assertions -> binary score `{0.0, 1.0}`):
 | # | name | condition | field path |
 |---|---|---|---|
-| 1 | task_status_correct | T003 moved to in_progress | `state_after.tasks["T003"]["status"] == "in_progress"` |
+| 1 | task_status_correct | T003 status was "todo" at episode start AND is "in_progress" at episode end (change-based) | `state_before.tasks["T003"]["status"] == "todo" and state_after.tasks["T003"]["status"] == "in_progress"` |
 | 2 | notification_posted | a top-level message exists in C002 from current_user after episode_start | `exists m in state_after.messages: m["channel"]=="C002" and m["author"]==current_user and m["parent_id"] is None and m["ts"]>episode_start` |
 | 3 | no_collateral_damage | only allowed diffs present | `no_collateral_damage(before, after, ALLOWED_CHANGES)` |
+| 4 | cross_service_link_used | `search_tasks(slack_message_id="M007")` appears in trajectory before the first `update_task` call; False if no `update_task` in trajectory | trajectory scan: any call with `tool=="search_tasks"` and `args["slack_message_id"]=="M007"` at index < first `update_task` index |
 
 ALLOWED_CHANGES:
 ```
@@ -114,12 +115,14 @@ ALLOWED_CHANGES:
 }
 ```
 
-Cheapest exploits + closure:
-| exploit | which assertions it fakes | why it does not reach 1.0 |
-|---|---|---|
-| update a guessed task to in_progress + post anything to C002, no search | 2 (and 1 only if it guesses T003) | assertion 1 names T003 specifically; with 6-8 tasks guessing is unlikely and pass^k averages luck out. Touching a non-T003 task trips assertion 3. |
-| post to C002 but never touch any task | 2 and 3 | score 0.67; fails only assertion 1 (T003 untouched). The single C002 post consumes the allowed message budget, so it is not collateral damage. Partial credit surfaces the missing task mutation in loss analysis |
-| update T003 but forget to post | 1 (+3) | score 0.67; missing notification visible per-assertion |
+Cheapest exploits + closure (all under binary scoring; any failing assertion -> 0.0):
+| exploit | a1 | a2 | a3 | a4 | score |
+|---|---|---|---|---|---|
+| text-search shortcut: search_tasks(query="payments outage"), update T003, post | T | T | T | F | 0.0 — T003 description contains no M007 keywords so search returns nothing; even if agent guesses T003 directly, a4 catches absence of M007 link traversal |
+| guess wrong task (e.g. T001), post to C002 | F | T | F | F | 0.0 — T003 untouched; T001 modification trips collateral damage |
+| update T003 via link, no post | T | F | T | T | 0.0 — notification missing |
+| post to C002, no task touched | F | T | T | F | 0.0 — T003 status unchanged; no update_task so a4=False |
+| honest 5-hop path | T | T | T | T | 1.0 |
 
 Note: `notification_posted` deliberately does NOT check message text content. Path-agnostic by design; the T003-specific assertion plus collateral damage carry discrimination. This tradeoff is desk-checked in `verifier_design.md` before any Gemma run.
 

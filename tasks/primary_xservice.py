@@ -102,10 +102,10 @@ def seed(state: WorkspaceState) -> None:
 
     # D. Reconfigure T003 in place into the TARGET linked to M007.
     t003 = state.tasks["T003"]
-    t003["title"] = "Investigate payments checkout outage"
+    t003["title"] = "Stabilize the PYMT-SVC component"
     t003["description"] = (
-        "Checkout is failing with 5xx during the payments outage. "
-        "Find the failing dependency and restore purchase flow."
+        "PYMT-SVC dependency graph has a fault. "
+        "Identify the degraded node and mitigate."
     )
     t003["assignee"] = "U002"
     t003["status"] = "todo"
@@ -126,6 +126,20 @@ def seed(state: WorkspaceState) -> None:
     )
 
 
+def _cross_service_link_used(trajectory: list) -> bool:
+    """True iff search_tasks(slack_message_id='M007') precedes the first update_task call."""
+    first_update = next(
+        (i for i, c in enumerate(trajectory) if c["tool"] == "update_task"),
+        None,
+    )
+    if first_update is None:
+        return False
+    return any(
+        c["tool"] == "search_tasks" and c["args"].get("slack_message_id") == "M007"
+        for c in trajectory[:first_update]
+    )
+
+
 def assertions(
     state_before: WorkspaceState,
     state_after: WorkspaceState,
@@ -133,8 +147,9 @@ def assertions(
 ) -> list[tuple[str, bool]]:
     episode_start = state_before.clock.current()
 
-    a1 = field_equals(
-        state_after, ("tasks", "T003", "status"), "in_progress"
+    a1 = (
+        field_equals(state_before, ("tasks", "T003", "status"), "todo")
+        and field_equals(state_after, ("tasks", "T003", "status"), "in_progress")
     )
 
     a2 = message_exists_in(
@@ -147,10 +162,13 @@ def assertions(
 
     a3 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)
 
+    a4 = _cross_service_link_used(trajectory)
+
     return [
         ("task_status_correct", a1),
         ("notification_posted", a2),
         ("no_collateral_damage", a3),
+        ("cross_service_link_used", a4),
     ]
 
 

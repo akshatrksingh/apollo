@@ -64,10 +64,15 @@ def assertions(
     state_after: WorkspaceState,
     trajectory: list,
 ) -> list[tuple[str, bool]]:
-    # assertion1: target message has :eyes: reaction from the acting user
-    target = state_after.messages.get(TARGET_ID, {})
-    target_reactions = target.get("reactions", {})
-    a1 = state_after.current_user in target_reactions.get(":eyes:", set())
+    target_before = state_before.messages.get(TARGET_ID, {})
+    reactions_before = target_before.get("reactions", {})
+    target_after = state_after.messages.get(TARGET_ID, {})
+    target_reactions_after = target_after.get("reactions", {})
+
+    a1 = (
+        state_after.current_user not in reactions_before.get("eyes", set())
+        and state_after.current_user in target_reactions_after.get("eyes", set())
+    )
 
     # assertion2: nothing changed outside ALLOWED_CHANGES
     a2 = no_collateral_damage(state_before, state_after, ALLOWED_CHANGES)

@@ -133,9 +133,10 @@ class SlackService:
         if msg is None:
             return {"ok": False, "error": "message_not_found"}
 
-        if emoji not in msg["reactions"]:
-            msg["reactions"][emoji] = set()
-        msg["reactions"][emoji].add(self._current_user)
+        normalized = emoji.strip(":")
+        if normalized not in msg["reactions"]:
+            msg["reactions"][normalized] = set()
+        msg["reactions"][normalized].add(self._current_user)
 
         return {"ok": True}
 
