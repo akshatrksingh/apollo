@@ -65,6 +65,11 @@ Each trial is independent: `setup()` builds a fresh seeded workspace and snapsho
 
 Both the target model (Gemma 4 26B) and a stronger reference model (Claude Sonnet 4.5) were run for 5 trials each against `vendor_reconcile`. `docs/results.html` has the full breakdown -- success rate, pass@k, per-assertion pass rates, failure-stage distribution, and annotated trajectory samples for both models.
 
+## Deliverables
+
+- **Client update** -- [client_update.html](https://htmlpreview.github.io/?https://github.com/akshatrksingh/apollo/blob/main/deliverables/client_update.html)
+- **Loss analysis** -- [loss_analysis.md](deliverables/loss_analysis.md)
+
 ## How to run
 
 Install dependencies:

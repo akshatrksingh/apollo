@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apollo workspace explorer — vendor_reconcile seed</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f6f4;
+    --sidebar-bg: #15191b;
+    --sidebar-text: #b9bdba;
+    --sidebar-text-dim: #6f7572;
+    --sidebar-active: #232a2d;
+    --accent: #1d9e75;
+    --text: #1a1c1b;
+    --text-muted: #6b7270;
+    --border: #e6e5e0;
+    --trap-bg: #faece7;   --trap-text: #712b13;   --trap-strong: #d85a30;
+    --signal-bg: #e1f5ee; --signal-text: #085041; --signal-strong: #1d9e75;
+    --context-bg: #f1efe8; --context-text: #444441; --context-strong: #888780;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--text); background: var(--bg);
+  }
+  .app { display: flex; height: 100vh; min-height: 560px; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 230px; flex-shrink: 0; background: var(--sidebar-bg); color: var(--sidebar-text);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  .sidebar-header {
+    padding: 16px 14px 10px; border-bottom: 1px solid #2a2f31;
+  }
+  .sidebar-header .ws-name { font-size: 15px; font-weight: 600; color: #fff; }
+  .sidebar-header .ws-sub { font-size: 11px; color: var(--sidebar-text-dim); margin-top: 2px; }
+  .sidebar-section {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--sidebar-text-dim); padding: 14px 14px 4px;
+  }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+    font-size: 14px; cursor: pointer; border-left: 3px solid transparent;
+  }
+  .sidebar-item:hover { background: #1d2224; }
+  .sidebar-item.active { background: var(--sidebar-active); color: #fff; border-left-color: var(--accent); }
+  .sidebar-item .icon { width: 16px; text-align: center; flex-shrink: 0; opacity: 0.8; font-size: 13px; }
+  .sidebar-item .noaccess {
+    margin-left: auto; font-size: 10px; color: var(--sidebar-text-dim);
+    border: 1px solid #383e40; border-radius: 4px; padding: 1px 5px;
+  }
+
+  /* Main */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    border-bottom: 1px solid var(--border); padding: 12px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .topbar .channel-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .topbar .channel-meta { font-size: 12px; color: var(--text-muted); }
+  .topbar .spacer { flex: 1; }
+  .topbar input[type="text"] {
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+    font-size: 13px; width: 200px; background: var(--bg-soft);
+  }
+  .toggle-wrap { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; user-select: none; }
+  .toggle {
+    width: 32px; height: 18px; border-radius: 9px; background: #d8d6cf; position: relative;
+    transition: background 0.15s;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff; transition: transform 0.15s;
+  }
+  .toggle.on::after { transform: translateX(14px); }
+
+  .legend { padding: 8px 20px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .legend .swatch { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .dot.trap { background: var(--trap-strong); }
+  .dot.signal { background: var(--signal-strong); }
+  .dot.context { background: var(--context-strong); }
+
+  .content { flex: 1; overflow-y: auto; padding: 14px 20px 40px; }
+
+  /* Messages */
+  .msg-row { display: flex; gap: 10px; padding: 6px 0; }
+  .msg-row.reply { margin-left: 38px; padding-left: 10px; border-left: 2px solid var(--border); }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 6px; background: var(--bg-soft);
+    border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; flex-shrink: 0; color: var(--text-muted);
+  }
+  .msg-body { min-width: 0; flex: 1; }
+  .msg-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .msg-name { font-weight: 600; font-size: 13px; }
+  .msg-time { font-size: 11px; color: var(--text-muted); }
+  .msg-text { font-size: 13.5px; line-height: 1.5; margin-top: 2px; white-space: pre-wrap; }
+  .msg-row.annotated { border-radius: 6px; padding: 6px 8px; margin: 2px 0; }
+  .msg-row.annotated.reply { margin-left: 38px; }
+  .ann-trap { background: var(--trap-bg); }
+  .ann-signal { background: var(--signal-bg); }
+  .ann-context { background: var(--context-bg); }
+  .ann-badge {
+    font-size: 10.5px; font-weight: 600; border-radius: 4px; padding: 1px 7px;
+    margin-left: 6px; white-space: nowrap;
+  }
+  .ann-badge.trap { background: #fff; color: var(--trap-text); }
+  .ann-badge.signal { background: #fff; color: var(--signal-text); }
+  .ann-badge.context { background: #fff; color: var(--context-text); }
+
+  .channel-empty { color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+
+  @keyframes flash {
+    0% { background: #fff6cc; }
+    100% { background: transparent; }
+  }
+  .flash { animation: flash 1.6s ease-out; }
+
+  /* Tasks table */
+  table.tasks { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.tasks th, table.tasks td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.tasks th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+  table.tasks tr:hover td { background: var(--bg-soft); }
+  .status-pill {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+  }
+  .status-todo { background: var(--context-bg); color: var(--context-text); }
+  .status-in_progress { background: #faeeda; color: #633806; }
+  .status-blocked { background: var(--trap-bg); color: var(--trap-text); }
+  .status-done { background: var(--signal-bg); color: var(--signal-text); }
+  .link-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 6px; cursor: pointer;
+  }
+  .link-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Search results */
+  .search-result { padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .search-result:hover { background: var(--bg-soft); }
+  .search-result .src-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+  .search-result .src-text { font-size: 13px; }
+  mark { background: #fde68a; border-radius: 2px; }
+
+  .footer-note { font-size: 11px; color: var(--text-muted); padding: 10px 20px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="topbar" id="topbar"></div>
+    <div class="legend" id="legend" style="display:none">
+      <span class="swatch"><span class="dot signal"></span>signal — points toward the correct answer</span>
+      <span class="swatch"><span class="dot trap"></span>trap — looks relevant, leads astray</span>
+      <span class="swatch"><span class="dot context"></span>context — background, neither</span>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="footer-note">
+      Apollo simulated workspace at episode_start (tick 104). 88 messages, 16 seeded tasks, 14 users, 9 channels.
+      Source: env/seed_rich.py + tasks/vendor_reconcile.py seed(). Annotations reflect the design notes in
+      docs/03_vendor_reconcile_deep_dive.md.
+    </div>
+  </div>
+</div>
+
+<script>
+const USERS = {
+  U001: {name:"Alice Chen", role:"manager"},
+  U002: {name:"Bob Kim", role:"engineer"},
+  U003: {name:"Carol Diaz", role:"engineer"},
+  U004: {name:"Agent", role:"bot"},
+  U005: {name:"Dave Park", role:"manager"},
+  U006: {name:"Maya Patel", role:"designer"},
+  U007: {name:"Finn Torres", role:"engineer"},
+  U008: {name:"Bob Park", role:"engineer"},
+  U009: {name:"Zara Osei", role:"manager"},
+  U010: {name:"Maya Rao", role:"designer"},
+  U011: {name:"Lena Vogel", role:"engineer"},
+  U012: {name:"Sam Okello", role:"engineer"},
+  U013: {name:"Priya Nair", role:"designer"},
+  U014: {name:"Sam Wells", role:"finance"}
+};
+
+const CHANNELS = [
+  {id:"C001", name:"general",       private:false, agent:true,  members:["U001","U002","U003","U004","U005","U006","U007","U008","U009","U010","U011","U012","U013"]},
+  {id:"C002", name:"incidents",     private:false, agent:true,  members:["U001","U002","U003","U004","U005","U007","U008","U011","U012"]},
+  {id:"C003", name:"engineering",   private:false, agent:true,  members:["U001","U002","U003","U004","U007","U008","U011","U012"]},
+  {id:"C004", name:"payments-team", private:true,  agent:true,  members:["U002","U003","U004","U007","U011"]},
+  {id:"C005", name:"leadership",    private:true,  agent:false, members:["U001","U005","U009"]},
+  {id:"C006", name:"on-call",       private:false, agent:true,  members:["U001","U002","U003","U004","U007","U008","U011","U012"]},
+  {id:"C007", name:"random",        private:false, agent:true,  members:["U001","U002","U003","U004","U005","U006","U007","U008","U010","U011","U012","U013"]},
+  {id:"C008", name:"design",        private:true,  agent:false, members:["U001","U006","U010","U013"]},
+  {id:"C009", name:"finance",       private:true,  agent:true,  members:["U001","U004","U014"]}
+];
+
+const MESSAGES = [
+  // C001 general
+  {id:"M001", channel:"C001", author:"U006", ts:1, parent:null, text:"Happy Friday everyone! Big plans for the weekend?"},
+  {id:"M002", channel:"C001", author:"U012", ts:2, parent:null, text:"Anyone up for lunch around noon?"},
+  {id:"M003", channel:"C001", author:"U008", ts:3, parent:null, text:"Out of office Monday, back Tuesday."},
+  {id:"M004", channel:"C001", author:"U013", ts:4, parent:null, text:"standup reminder: 9:30am in #engineering"},
+  {id:"M005", channel:"C001", author:"U011", ts:5, parent:null, text:"Can we sync later about the deploy pipeline?"},
+  {id:"M006", channel:"C001", author:"U003", ts:6, parent:null, text:"Just merged the onboarding doc updates."},
+  {id:"M007", channel:"C001", author:"U007", ts:7, parent:null, text:"Thanks Carol! I was waiting for that."},
+  {id:"M008", channel:"C001", author:"U005", ts:8, parent:null, text:"Reminder: Q3 planning doc due EOW."},
+  {id:"M009", channel:"C001", author:"U002", ts:9, parent:null, text:"Will get to it after the incident call."},
+  {id:"M010", channel:"C001", author:"U001", ts:10, parent:null, text:"Welcome Priya and Lena -- both joining the design and eng teams respectively!"},
+  {id:"M074", channel:"C001", author:"U012", ts:89, parent:null, text:"Someone from finance keeps pinging me about vendor payments. Not really my area -- I'm on the eng side. Who handles AP?"},
+  {id:"M083", channel:"C001", author:"U008", ts:99, parent:null, text:"Quick note: I'm covering some AP coordination this week while the planning sessions run. If vendor payment questions come up that need routing, DM me or drop a note here and I'll make sure they get to the right person."},
+  {id:"M084", channel:"C001", author:"U009", ts:100, parent:"M083", text:"Thanks Bob, helpful to know."},
+  {id:"M085", channel:"C001", author:"U001", ts:101, parent:null, text:"Cross-posting from #finance: Sam Wells flagged a vendor payment discrepancy that needs someone with access to payment logs and vendor contracts. If you handle vendor AP please respond in the #finance thread."},
+
+  // C002 incidents
+  {id:"M011", channel:"C002", author:"U001", ts:11, parent:null, text:"INC-007 (resolved): Payment gateway latency spike last Tuesday -- p99 hit 4s. Root cause was misconfigured connection pool. Fixed and closed."},
+  {id:"M012", channel:"C002", author:"U003", ts:12, parent:"M011", text:"INC-007: Post-mortem filed. Action item: add connection pool size to runbook."},
+  {id:"M013", channel:"C002", author:"U002", ts:13, parent:"M011", text:"INC-007: Runbook updated."},
+  {id:"M014", channel:"C002", author:"U008", ts:14, parent:null, text:"Anyone else seeing flaky tests in CI this morning?"},
+  {id:"M015", channel:"C002", author:"U011", ts:15, parent:null, text:"Yeah the test_payment_reconcile suite has been flaky for a week. Not blocking anything though."},
+  {id:"M016", channel:"C002", author:"U007", ts:16, parent:null, text:"INC-012 ACTIVE: Checkout payments latency spiking again -- p99 now 6s, error rate 2%. Started ~30m ago."},
+  {id:"M017", channel:"C002", author:"U002", ts:17, parent:"M016", text:"INC-012: On it. Checking DB query times."},
+  {id:"M018", channel:"C002", author:"U011", ts:18, parent:"M016", text:"INC-012: I see the same in the metrics. Looks like the payments-svc index query."},
+  {id:"M019", channel:"C002", author:"U007", ts:19, parent:"M016", text:"INC-012: Confirmed -- missing index on transactions table after last migration."},
+  {id:"M020", channel:"C002", author:"U001", ts:20, parent:"M016", text:"INC-012: Who can own the fix? Need a task created and index added ASAP."},
+  {id:"M021", channel:"C002", author:"U004", ts:21, parent:"M016", text:"INC-012: Acknowledged, monitoring metrics."},
+  {id:"M022", channel:"C002", author:"U003", ts:22, parent:null, text:"Heads up: auth service latency up slightly (p50 ~120ms vs normal 80ms). Not incident-level, just watching it."},
+  {id:"M023", channel:"C002", author:"U012", ts:23, parent:"M022", text:"Probably the token validation cache miss rate. I'll dig in."},
+  {id:"M024", channel:"C002", author:"U003", ts:24, parent:"M022", text:"Resolved -- cache was cold after last restart. Back to normal."},
+  {id:"M069", channel:"C002", author:"U012", ts:84, parent:null, text:"Heads up -- Brightline mentioned they're updating API contract terms next month. Not urgent but someone should track it for the integration team."},
+  {id:"M086", channel:"C002", author:"U007", ts:102, parent:null, text:"Closing out: Brightline API gateway latency incident from Q2 is fully resolved. Post-mortem filed, runbook updated. No further action needed."},
+
+  // C003 engineering
+  {id:"M025", channel:"C003", author:"U008", ts:25, parent:null, text:"PR #88 up: refactor retry logic to use exponential backoff."},
+  {id:"M026", channel:"C003", author:"U011", ts:26, parent:"M025", text:"Left a couple nits on PR #88, looks solid overall."},
+  {id:"M027", channel:"C003", author:"U002", ts:27, parent:"M025", text:"Approved PR #88. Merging after CI."},
+  {id:"M028", channel:"C003", author:"U008", ts:28, parent:"M025", text:"PR #88 merged."},
+  {id:"M029", channel:"C003", author:"U001", ts:29, parent:null, text:"Deploy freeze starts Thursday EOD through Sunday for the mobile release. Non-critical changes should wait."},
+  {id:"M030", channel:"C003", author:"U007", ts:30, parent:"M029", text:"Got it. Will hold my payments-svc index migration PR until Monday."},
+  {id:"M031", channel:"C003", author:"U012", ts:31, parent:null, text:"The user-schema migration from last sprint landed cleanly, all green."},
+  {id:"M032", channel:"C003", author:"U009", ts:32, parent:null, text:"On-call rotation: Bob Kim is primary this week, Finn is secondary."},
+  {id:"M033", channel:"C003", author:"U003", ts:33, parent:null, text:"Standup: finished auth rate-limit refactor. Starting on notification service next."},
+  {id:"M034", channel:"C003", author:"U011", ts:34, parent:null, text:"Standup: reviewing PRs today, then back on the reconciliation alerting task."},
+  {id:"M035", channel:"C003", author:"U007", ts:35, parent:null, text:"Standup: INC-012 investigation, then payments-svc index PR."},
+  {id:"M072", channel:"C003", author:"U007", ts:87, parent:null, text:"Cloudmesh API integration is still in onboarding. They haven't invoiced us for this month -- payment pending their billing cycle."},
+  {id:"M087", channel:"C003", author:"U003", ts:103, parent:null, text:"Standup: finishing up the vendor payment reconciliation script refactor, and following up with legal on the Brightline amendment question."},
+
+  // C004 payments-team (private)
+  {id:"M036", channel:"C004", author:"U002", ts:36, parent:null, text:"Stripe webhook idempotency issue from last month: fully resolved. New dedup key logic is live."},
+  {id:"M037", channel:"C004", author:"U011", ts:37, parent:"M036", text:"Confirmed, no duplicate charge events in the last 7 days."},
+  {id:"M038", channel:"C004", author:"U003", ts:38, parent:"M036", text:"Closing that item off the backlog."},
+  {id:"M039", channel:"C004", author:"U007", ts:39, parent:null, text:"Created PR #91 for the missing index on transactions.checkout_at. Needs review before merge."},
+  {id:"M040", channel:"C004", author:"U002", ts:40, parent:"M039", text:"On it -- will review PR #91 this afternoon."},
+  {id:"M041", channel:"C004", author:"U011", ts:41, parent:"M039", text:"I can add the create-index migration script if needed."},
+  {id:"M042", channel:"C004", author:"U003", ts:42, parent:"M039", text:"Do it -- migration + index in one PR is cleaner."},
+  {id:"M043", channel:"C004", author:"U003", ts:43, parent:null, text:"Reconciliation job ran clean last night. No mismatches."},
+  {id:"M044", channel:"C004", author:"U002", ts:44, parent:null, text:"Good. Let's keep the alerting task on the board for this week anyway."},
+  {id:"M066", channel:"C004", author:"U003", ts:81, parent:null, text:"FYI -- Acme Corp vendor disbursement went out this morning. Amount transferred: $4,200."},
+  {id:"M067", channel:"C004", author:"U002", ts:82, parent:"M066", text:"Wait -- that's wrong, sorry. I gave you last quarter's figure by mistake. The actual transfer for this cycle was $2,400. Acme Corp = $2,400 is correct."},
+  {id:"M068", channel:"C004", author:"U003", ts:83, parent:null, text:"Brightline vendor payment submitted and processed: $2,200 confirmed."},
+  {id:"M073", channel:"C004", author:"U011", ts:88, parent:null, text:"Added Cloudmesh to the payment queue for when their invoice arrives. No transfer has gone out yet this month."},
+  {id:"M078", channel:"C004", author:"U003", ts:94, parent:null, text:"Heads up on the Brightline payment -- Brightline's account manager sent over a contract amendment last month reducing the monthly disbursement to $2,200 effective immediately. If that went through, the $2,200 payment is correct and there's nothing to fix."},
+  {id:"M079", channel:"C004", author:"U002", ts:95, parent:null, text:"Carol -- that amendment was rejected by legal two weeks ago. Schedule B was missing and the CFO countersignature was never collected. I went through the contracts folder this morning: the original $2,400 monthly rate is still binding. The $2,200 payment is a shortfall and needs a fix task opened."},
+  {id:"M080", channel:"C004", author:"U011", ts:96, parent:null, text:"Side note: last month Brightline also came in at $2,200. Accounting adjusted it manually after the fact. Not sure if this amendment Carol mentioned was partially applied. Someone should confirm what the right amount actually is before we escalate."},
+  {id:"M081", channel:"C004", author:"U007", ts:97, parent:null, text:"Reminder: T016 (Brightline API contract terms) is a separate item from the finance vendor payment. Please don't conflate them. The API contract review is an integration-team item and has nothing to do with the monthly disbursement."},
+  {id:"M082", channel:"C004", author:"U002", ts:98, parent:null, text:"Also confirming: Acme is clean this cycle. Carol's original post had last quarter's figure by mistake -- the actual transfer was $2,400 which matches the contract. No action needed on Acme."},
+
+  // C005 leadership (private, agent not a member)
+  {id:"M045", channel:"C005", author:"U001", ts:45, parent:null, text:"Q3 budget locked. Headcount +2 eng, +1 design."},
+  {id:"M046", channel:"C005", author:"U005", ts:46, parent:"M045", text:"I will draft the offer letters by EOW."},
+  {id:"M047", channel:"C005", author:"U009", ts:47, parent:null, text:"Roadmap v2 deck ready for board review Thursday."},
+  {id:"M048", channel:"C005", author:"U001", ts:48, parent:null, text:"Good. Let's do a dry run Wednesday 4pm."},
+
+  // C006 on-call
+  {id:"M049", channel:"C006", author:"U001", ts:49, parent:null, text:"PagerDuty alert: payments-svc error rate exceeded 1% threshold. Incident INC-012 opened."},
+  {id:"M050", channel:"C006", author:"U002", ts:50, parent:"M049", text:"Acknowledged. Working the issue with Finn."},
+  {id:"M051", channel:"C006", author:"U007", ts:51, parent:"M049", text:"Runbook link: https://internal/runbooks/payments-latency"},
+  {id:"M052", channel:"C006", author:"U011", ts:52, parent:null, text:"Disk usage on prod-db-01 at 78%. Keeping watch -- not a page yet."},
+  {id:"M053", channel:"C006", author:"U012", ts:53, parent:null, text:"Last week's disk alert on prod-db-02 was resolved. Added automated cleanup job."},
+  {id:"M054", channel:"C006", author:"U008", ts:54, parent:"M053", text:"Confirmed -- disk now at 55% and stable."},
+
+  // C007 random
+  {id:"M055", channel:"C007", author:"U006", ts:55, parent:null, text:"Anyone else watching the Euros? Wild match last night."},
+  {id:"M056", channel:"C007", author:"U013", ts:56, parent:null, text:"Yes!! That last-minute goal was insane."},
+  {id:"M057", channel:"C007", author:"U008", ts:57, parent:null, text:"Off topic but: best coffee spot near the office?"},
+  {id:"M058", channel:"C007", author:"U003", ts:58, parent:null, text:"The place on 3rd St. is great, opens at 7am."},
+  {id:"M059", channel:"C007", author:"U011", ts:59, parent:null, text:"Has anyone tried the new standing desk setup in room 4B?"},
+  {id:"M060", channel:"C007", author:"U007", ts:60, parent:null, text:"Just booked it for Friday afternoon."},
+  {id:"M061", channel:"C007", author:"U002", ts:61, parent:null, text:"Anyone know if we have a VPN policy doc?"},
+  {id:"M062", channel:"C007", author:"U012", ts:62, parent:"M061", text:"I think it's in the Notion wiki but I can't find the link."},
+  {id:"M063", channel:"C007", author:"U001", ts:63, parent:"M061", text:"I'll find it and post here -- might take a day."},
+  {id:"M070", channel:"C007", author:"U011", ts:85, parent:null, text:"The Acme account setup took three weeks this quarter -- glad it's finally sorted."},
+  {id:"M088", channel:"C007", author:"U013", ts:104, parent:null, text:"Total tangent but Brightline (the train service) just launched a new route. Kept seeing 'Brightline' in work Slack and got confused for a second \uD83D\uDE04"},
+
+  // C009 finance (private) -- created entirely by vendor_reconcile seed
+  {id:"M064", channel:"C009", author:"U014", ts:79, parent:null, text:"Hey team -- month-end vendor payment run is complete. We had three vendors this cycle: Acme Corp, Brightline, and Cloudmesh. I'm seeing at least one line item that doesn't match contract. Can the payments engineer look into this and get back to me here? Need confirmation or a fix task opened by EOD."},
+  {id:"M065", channel:"C009", author:"U001", ts:80, parent:"M064", text:"Noted. I'll make sure the right person looks at this today."},
+  {id:"M071", channel:"C009", author:"U014", ts:86, parent:null, text:"For reference, contracted monthly amounts: Acme Corp $2,400, Brightline $2,400. Cloudmesh invoice hasn't come in yet -- they indicated end of month."},
+  {id:"M075", channel:"C009", author:"U003", ts:91, parent:"M064", text:"I've handled the Cloudmesh queue item already (holding for their invoice). For Brightline and Acme someone from the payments team will need to confirm actuals against contracts -- I'll check in with them."},
+  {id:"M076", channel:"C009", author:"U014", ts:92, parent:"M064", text:"Thanks Carol. Based on what I'm seeing I think Brightline is the one that's off but there's some back-and-forth in #payments-team about an amendment. Someone needs to resolve that thread and confirm the contracted rate before we act."},
+  {id:"M077", channel:"C009", author:"U001", ts:93, parent:"M064", text:"I've pinged the payments team channel. No reply yet. If anyone here knows who owns vendor AP day-to-day, please jump in this thread directly."}
+];
+
+const TASKS = [
+  {id:"T001", title:"Add index on transactions.checkout_at", desc:"INC-012: Missing index causing p99 latency spike. Add index in a migration. Blocks T002.", assignee:"U007", status:"in_progress", link:"M039", ts:64},
+  {id:"T002", title:"Deploy payments-svc index migration", desc:"Deploy PR #91 to production once reviewed. Depends on T001 completing first.", assignee:"U002", status:"blocked", link:"M040", ts:65},
+  {id:"T003", title:"Resolve INC-012 and file post-mortem", desc:"Write post-mortem for the checkout latency spike. Depends on T002 resolution.", assignee:"U001", status:"todo", link:"M020", ts:66},
+  {id:"T004", title:"Add reconciliation job failure alerting", desc:"Wire payment reconciliation failures to PagerDuty. Continuing from prior sprint.", assignee:"U011", status:"in_progress", link:"M044", ts:67},
+  {id:"T005", title:"Add disk usage alert for prod-db-01", desc:"Disk at 78%. Add alert threshold at 80% in monitoring. Similar to last sprint's prod-db-02 fix.", assignee:"U012", status:"todo", link:"M052", ts:68},
+  {id:"T006", title:"Stripe webhook idempotency audit", desc:"Audit all inbound Stripe webhooks for dedup key correctness. Follow-up from resolved incident, not INC-012.", assignee:"U003", status:"done", link:"M037", ts:69},
+  {id:"T007", title:"Auth rate-limit config refactor", desc:"Move auth rate limit values to config service. Follow-up from old INC. Not related to current latency.", assignee:"U003", status:"in_progress", link:null, ts:70},
+  {id:"T008", title:"Payment reconciliation runbook", desc:"Document the reconciliation job manually triggering steps. Separate from alerting task T004.", assignee:"U002", status:"todo", link:null, ts:71},
+  {id:"T009", title:"Review and merge PR #91 (index migration)", desc:"Review Finn's index PR before deploy freeze Thursday. Linked to INC-012 work.", assignee:"U002", status:"in_progress", link:"M039", ts:72},
+  {id:"T010", title:"Hold non-critical deploys until Monday", desc:"Enforce deploy freeze Thu EOD through Sunday. See #engineering announcement.", assignee:"U001", status:"todo", link:"M029", ts:73},
+  {id:"T011", title:"Update onboarding documentation", desc:"Add new tooling section to the onboarding guide. Low priority.", assignee:"U006", status:"todo", link:null, ts:74},
+  {id:"T012", title:"Design system component audit", desc:"Catalog all button/form variants across the app for the design system refresh.", assignee:"U010", status:"in_progress", link:null, ts:75},
+  {id:"T013", title:"VPN policy documentation", desc:"Write and publish the company VPN usage policy. Requested in #random.", assignee:"U001", status:"todo", link:"M063", ts:76},
+  {id:"T014", title:"Exponential backoff retry refactor", desc:"Complete retry logic refactor. PR #88 merged; close this task.", assignee:"U008", status:"done", link:"M028", ts:77},
+  {id:"T015", title:"Token validation cache warm-up", desc:"Add cache pre-warm on auth service restart to avoid cold-cache latency. From #incidents thread.", assignee:"U003", status:"todo", link:"M024", ts:78},
+  {id:"T016", title:"Brightline API contract terms review", desc:"Track and review Brightline's proposed API contract amendment. Separate from finance vendor payments -- this is the integration-team item. Owner: Finn Torres.", assignee:"U007", status:"done", link:null, ts:90, decoy:true}
+];
+
+// Design notes from docs/03_vendor_reconcile_deep_dive.md -- only messages
+// relevant to vendor_reconcile carry an annotation. Everything else is plain
+// rich_workspace background.
+const ANNOTATIONS = {
+  M064: {type:"context", label:"reply target"},
+  M066: {type:"trap",    label:"decoy: stale figure"},
+  M067: {type:"signal",  label:"correction: $2,400 is right"},
+  M068: {type:"signal",  label:"key fact: paid $2,200"},
+  M069: {type:"trap",    label:"unrelated Brightline mention"},
+  M071: {type:"signal",  label:"key fact: contract = $2,400"},
+  M072: {type:"trap",    label:"Cloudmesh trap"},
+  M073: {type:"trap",    label:"Cloudmesh trap"},
+  M074: {type:"trap",    label:"wrong-Sam trap"},
+  M076: {type:"signal",  label:"hint: check #payments-team"},
+  M078: {type:"trap",    label:"trap: Carol says $2,200 is fine"},
+  M079: {type:"signal",  label:"key signal: Bob, $2,400 binding"},
+  M080: {type:"trap",    label:"normalizes $2,200"},
+  M081: {type:"context", label:"T016 scope clarifier"},
+  M082: {type:"signal",  label:"Bob narrows focus to Brightline"},
+  M083: {type:"trap",    label:"wrong-Bob trap"},
+  M084: {type:"trap",    label:"reinforces wrong Bob"},
+  M085: {type:"context", label:"generic escalation"},
+  M086: {type:"trap",    label:"old incident, irrelevant"},
+  M087: {type:"trap",    label:"search trap: anchors on Carol"},
+  M088: {type:"trap",    label:"pure noise"}
+};
+
+// ---- helpers ----
+function userInitials(uid) {
+  const n = USERS[uid].name;
+  return n.split(" ").map(p => p[0]).join("").slice(0,2).toUpperCase();
+}
+function tickToTime(ts) {
+  const totalMin = ts; // base 10:00, +1 per tick
+  let h = 10 + Math.floor(totalMin / 60);
+  let m = totalMin % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return h12 + ":" + String(m).padStart(2,"0") + " " + ampm;
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function highlight(text, query) {
+  const esc = escapeHtml(text);
+  if (!query) return esc;
+  const idx = esc.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return esc;
+  return esc.slice(0,idx) + "<mark>" + esc.slice(idx, idx+query.length) + "</mark>" + esc.slice(idx+query.length);
+}
+
+// ---- state ----
+let state = {
+  view: "channel",      // "channel" | "tasks" | "search"
+  channel: "C004",
+  annotations: true,
+  query: "",
+  jumpTo: null
+};
+
+function setView(view, channel) {
+  state.view = view;
+  if (channel) state.channel = channel;
+  state.query = "";
+  document.getElementById("searchInput").value = "";
+  render();
+}
+function jumpToMessage(msgId) {
+  const msg = MESSAGES.find(m => m.id === msgId);
+  if (!msg) return;
+  state.view = "channel";
+  state.channel = msg.channel;
+  state.query = "";
+  document.getElementById("searchInput").value = "";
+  state.jumpTo = msgId;
+  render();
+}
+function toggleAnnotations() {
+  state.annotations = !state.annotations;
+  render();
+}
+function onSearch(val) {
+  state.query = val.trim();
+  state.view = state.query ? "search" : "channel";
+  render();
+}
+
+// ---- render ----
+function renderSidebar() {
+  let html = '<div class="sidebar-header"><div class="ws-name">Apollo workspace</div><div class="ws-sub">vendor_reconcile · episode_start</div></div>';
+  html += '<div class="sidebar-section">Channels</div>';
+  CHANNELS.forEach(ch => {
+    const active = state.view === "channel" && state.channel === ch.id ? " active" : "";
+    const icon = ch.private ? "&#128274;" : "#";
+    const noaccess = !ch.agent ? '<span class="noaccess">no agent access</span>' : "";
+    html += `<div class="sidebar-item${active}" onclick="setView('channel','${ch.id}')">
+      <span class="icon">${icon}</span><span>${ch.name}</span>${noaccess}
+    </div>`;
+  });
+  html += '<div class="sidebar-section">Task manager</div>';
+  const taskActive = state.view === "tasks" ? " active" : "";
+  html += `<div class="sidebar-item${taskActive}" onclick="setView('tasks')">
+    <span class="icon">&#9776;</span><span>All tasks (T001&ndash;T016)</span>
+  </div>`;
+  document.getElementById("sidebar").innerHTML = html;
+}
+
+function renderTopbar() {
+  let html = "";
+  if (state.view === "channel") {
+    const ch = CHANNELS.find(c => c.id === state.channel);
+    const icon = ch.private ? "&#128274;" : "#";
+    const memberNames = ch.members.map(u => USERS[u].name).join(", ");
+    html += `<div class="channel-title">${icon} ${ch.name}</div>
+      <div class="channel-meta">${ch.members.length} members: ${memberNames}${ch.agent ? "" : " &mdash; agent (U004) is not a member of this channel"}</div>`;
+  } else if (state.view === "tasks") {
+    html += `<div class="channel-title">&#9776; Task manager</div>
+      <div class="channel-meta">16 seeded tasks (T001&ndash;T016). T017 is created by the agent during a trial.</div>`;
+  } else {
+    html += `<div class="channel-title">Search results</div>
+      <div class="channel-meta">"${escapeHtml(state.query)}" across all channels (case-insensitive substring)</div>`;
+  }
+  html += '<div class="spacer"></div>';
+  html += '<input type="text" id="searchInput" placeholder="search messages..." value="' + escapeHtml(state.query) + '" oninput="onSearch(this.value)">';
+  html += `<div class="toggle-wrap" onclick="toggleAnnotations()">
+      <div class="toggle ${state.annotations ? "on" : ""}"></div>
+      <span>task annotations</span>
+    </div>`;
+  document.getElementById("topbar").innerHTML = html;
+  document.getElementById("legend").style.display = state.annotations ? "flex" : "none";
+}
+
+function renderMessageRow(msg, isReply) {
+  const ann = ANNOTATIONS[msg.id];
+  const showAnn = state.annotations && ann;
+  let cls = "msg-row" + (isReply ? " reply" : "");
+  if (showAnn) cls += " annotated ann-" + ann.type;
+  if (state.jumpTo === msg.id) cls += " flash";
+  let badge = "";
+  if (showAnn) badge = `<span class="ann-badge ${ann.type}">${ann.label}</span>`;
+  return `<div class="${cls}" id="msg-${msg.id}">
+    <div class="avatar">${userInitials(msg.author)}</div>
+    <div class="msg-body">
+      <div class="msg-head">
+        <span class="msg-name">${USERS[msg.author].name}</span>
+        <span class="msg-time">${tickToTime(msg.ts)}</span>
+        ${badge}
+      </div>
+      <div class="msg-text">${escapeHtml(msg.text)}</div>
+    </div>
+  </div>`;
+}
+
+function renderChannel() {
+  const msgs = MESSAGES.filter(m => m.channel === state.channel);
+  const topLevel = msgs.filter(m => !m.parent).sort((a,b) => a.ts - b.ts);
+  if (topLevel.length === 0) {
+    document.getElementById("content").innerHTML = '<div class="channel-empty">No messages in this channel at episode_start.</div>';
+    return;
+  }
+  let html = "";
+  topLevel.forEach(m => {
+    html += renderMessageRow(m, false);
+    const replies = msgs.filter(r => r.parent === m.id).sort((a,b) => a.ts - b.ts);
+    replies.forEach(r => html += renderMessageRow(r, true));
+  });
+  document.getElementById("content").innerHTML = html;
+  if (state.jumpTo) {
+    const el = document.getElementById("msg-" + state.jumpTo);
+    if (el) el.scrollIntoView({block:"center"});
+    state.jumpTo = null;
+  }
+}
+
+function renderTasks() {
+  let html = '<table class="tasks"><thead><tr><th>id</th><th>title</th><th>assignee</th><th>status</th><th>linked message</th></tr></thead><tbody>';
+  TASKS.forEach(t => {
+    const link = t.link ? `<span class="link-chip" onclick="jumpToMessage('${t.link}')">${t.link}</span>` : "&mdash;";
+    const decoy = t.decoy ? ' <span class="ann-badge trap">decoy task</span>' : "";
+    html += `<tr>
+      <td>${t.id}</td>
+      <td>${escapeHtml(t.title)}${decoy}<br><span style="color:var(--text-muted);font-size:11.5px">${escapeHtml(t.desc)}</span></td>
+      <td>${USERS[t.assignee].name}</td>
+      <td><span class="status-pill status-${t.status}">${t.status}</span></td>
+      <td>${link}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("content").innerHTML = html;
+}
+
+function renderSearch() {
+  const q = state.query.toLowerCase();
+  const matches = MESSAGES.filter(m => m.text.toLowerCase().includes(q))
+    .sort((a,b) => a.ts - b.ts);
+  if (matches.length === 0) {
+    document.getElementById("content").innerHTML = '<div class="channel-empty">No messages match.</div>';
+    return;
+  }
+  let html = "";
+  matches.forEach(m => {
+    const ch = CHANNELS.find(c => c.id === m.channel);
+    html += `<div class="search-result" onclick="jumpToMessage('${m.id}')">
+      <div class="src-meta">#${ch.name} &middot; ${USERS[m.author].name} &middot; ${tickToTime(m.ts)} &middot; ${m.id}</div>
+      <div class="src-text">${highlight(m.text, state.query)}</div>
+    </div>`;
+  });
+  document.getElementById("content").innerHTML = html;
+}
+
+function render() {
+  renderSidebar();
+  renderTopbar();
+  if (state.view === "channel") renderChannel();
+  else if (state.view === "tasks") renderTasks();
+  else renderSearch();
+}
+
+render();
+</script>
+</body>
+</html>
