@@ -67,7 +67,7 @@ Both the target model (Gemma 4 26B) and a stronger reference model (Claude Sonne
 
 ## Deliverables
 
-- **Client update** -- [client_update.html](https://htmlpreview.github.io/?https://github.com/akshatrksingh/apollo/blob/main/deliverables/client_update.html)
+- **Client update** -- [client_update.pdf](deliverables/client_update.pdf)
 - **Loss analysis** -- [loss_analysis.md](deliverables/loss_analysis.md)
 
 ## How to run
