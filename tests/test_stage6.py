@@ -28,7 +28,7 @@ from runner.run_trials import (
 from tasks.registry import get_task
 
 MODEL = "test/model"
-PRIMARY = "primary_xservice"
+PRIMARY = "vendor_reconcile"
 
 
 class ScriptedClient:
@@ -98,20 +98,52 @@ def _stop() -> AgentMessage:
 
 
 _HONEST_SCRIPT = [
-    _call(0, "search_messages", {"query": "payments outage"}),
-    _call(1, "search_tasks", {"slack_message_id": "M007"}),
-    _call(2, "update_task", {"task_id": "T003", "status": "in_progress"}),
+    _call(0, "get_channel_messages", {"channel_id": "C009"}),
+    _call(1, "get_channel_messages", {"channel_id": "C004"}),
+    _call(
+        2,
+        "create_task",
+        {
+            "title": "Fix Brightline short payment",
+            "description": "Brightline was paid $2,200 vs contracted $2,400. Needs correction.",
+            "assignee": "U002",
+            "status": "todo",
+        },
+    ),
     _call(
         3,
         "post_message",
-        {"channel_id": "C002", "text": "Picking up the payments outage now."},
+        {
+            "channel_id": "C009",
+            "text": "Confirmed: Brightline was short-paid ($2,200 vs $2,400 contracted). Fix task opened and assigned to the payments engineer.",
+            "parent_id": "M064",
+        },
     ),
     _stop(),
 ]
 
+# Lazy: creates a Brightline task but assigns to wrong person (U001 instead of U002),
+# still posts a valid reply. A2 fails -> score 0.0, but writes succeed -> partial_writes.
 _LAZY_SCRIPT = [
-    _call(0, "update_task", {"task_id": "T001", "status": "in_progress"}),
-    _call(1, "post_message", {"channel_id": "C002", "text": "done"}),
+    _call(
+        0,
+        "create_task",
+        {
+            "title": "Fix Brightline short payment",
+            "description": "Brightline was short-paid.",
+            "assignee": "U001",
+            "status": "todo",
+        },
+    ),
+    _call(
+        1,
+        "post_message",
+        {
+            "channel_id": "C009",
+            "text": "Brightline payment issue -- task created.",
+            "parent_id": "M064",
+        },
+    ),
     _stop(),
 ]
 
@@ -163,10 +195,11 @@ def test_run_one_trial_honest_all_three_assertions_true():
     record = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)
     by_name = {a["name"]: a["passed"] for a in record["assertions"]}
     assert by_name == {
-        "task_status_correct": True,
-        "notification_posted": True,
+        "brightline_task_created": True,
+        "task_assigned_to_payments_engineer": True,
+        "reply_in_finance_thread": True,
+        "reply_names_brightline": True,
         "no_collateral_damage": True,
-        "cross_service_link_used": True,
     }
 
 
@@ -175,9 +208,9 @@ def test_run_one_trial_tool_calls_preserve_scripted_order():
     record = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)
     names = [c["tool"] for c in record["tool_calls"]]
     assert names == [
-        "search_messages",
-        "search_tasks",
-        "update_task",
+        "get_channel_messages",
+        "get_channel_messages",
+        "create_task",
         "post_message",
     ]
 
@@ -187,9 +220,9 @@ def test_run_one_trial_tool_calls_have_tool_args_result():
     record = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)
     for call in record["tool_calls"]:
         assert {"tool", "args", "result"}.issubset(call.keys())
-    update = next(c for c in record["tool_calls"] if c["tool"] == "update_task")
-    assert update["args"]["task_id"] == "T003"
-    assert update["result"]["ok"] is True
+    create = next(c for c in record["tool_calls"] if c["tool"] == "create_task")
+    assert create["args"]["assignee"] == "U002"
+    assert create["result"]["ok"] is True
 
 
 def test_run_one_trial_record_has_numeric_score_and_assertion_names():
@@ -198,10 +231,11 @@ def test_run_one_trial_record_has_numeric_score_and_assertion_names():
     assert isinstance(record["score"], (int, float))
     names = {a["name"] for a in record["assertions"]}
     assert names == {
-        "task_status_correct",
-        "notification_posted",
+        "brightline_task_created",
+        "task_assigned_to_payments_engineer",
+        "reply_in_finance_thread",
+        "reply_names_brightline",
         "no_collateral_damage",
-        "cross_service_link_used",
     }
 
 
@@ -216,10 +250,11 @@ def test_run_one_trial_lazy_identifies_failing_assertions():
     record = run_one_trial(module, MODEL, lazy_primary_client(), max_turns=10)
     by_name = {a["name"]: a["passed"] for a in record["assertions"]}
     assert by_name == {
-        "task_status_correct": False,
-        "notification_posted": True,
-        "no_collateral_damage": False,
-        "cross_service_link_used": False,
+        "brightline_task_created": True,
+        "task_assigned_to_payments_engineer": False,
+        "reply_in_finance_thread": True,
+        "reply_names_brightline": True,
+        "no_collateral_damage": True,
     }
 
 
@@ -254,7 +289,6 @@ def test_run_trials_all_honest_distribution_and_mean(tmp_path):
     assert agg["trials"] == 3
     assert agg["success_rate"] == pytest.approx(1.0)
     assert agg["pass_at_k"] == pytest.approx(1.0)
-    assert agg["pass_all_k"] == pytest.approx(1.0)
 
 
 def test_run_trials_all_honest_per_assertion_rates_all_one(tmp_path):
@@ -267,8 +301,8 @@ def test_run_trials_all_honest_per_assertion_rates_all_one(tmp_path):
         transcripts_dir=str(tmp_path),
     )
     rates = agg["per_assertion_pass_rate"]
-    assert rates["task_status_correct"] == 1.0
-    assert rates["notification_posted"] == 1.0
+    assert rates["brightline_task_created"] == 1.0
+    assert rates["task_assigned_to_payments_engineer"] == 1.0
     assert rates["no_collateral_damage"] == 1.0
 
 
@@ -308,9 +342,9 @@ def test_run_trials_all_lazy_per_assertion_rates_pinpoint_failure(tmp_path):
         transcripts_dir=str(tmp_path),
     )
     rates = agg["per_assertion_pass_rate"]
-    assert rates["task_status_correct"] == 0.0
-    assert rates["no_collateral_damage"] == 0.0
-    assert rates["notification_posted"] == 1.0
+    assert rates["task_assigned_to_payments_engineer"] == 0.0
+    assert rates["brightline_task_created"] == 1.0
+    assert rates["reply_in_finance_thread"] == 1.0
 
 
 def test_run_trials_per_assertion_rate_values_are_fractions(tmp_path):
@@ -417,15 +451,15 @@ def test_transcript_contents_have_instruction_calls_score_assertions(tmp_path):
     # ordered tool calls each with args and result
     names = [c["tool"] for c in data["tool_calls"]]
     assert names == [
-        "search_messages",
-        "search_tasks",
-        "update_task",
+        "get_channel_messages",
+        "get_channel_messages",
+        "create_task",
         "post_message",
     ]
     for c in data["tool_calls"]:
         assert "args" in c and "result" in c
-    # exactly 4 per-assertion booleans for the primary task
-    assert len(data["assertions"]) == 4
+    # exactly 5 per-assertion booleans for vendor_reconcile
+    assert len(data["assertions"]) == 5
     for a in data["assertions"]:
         assert isinstance(a["passed"], bool)
 
@@ -614,8 +648,8 @@ def test_tool_calls_have_ok_flag():
     for tc in record["tool_calls"]:
         assert "ok" in tc
         assert isinstance(tc["ok"], bool)
-    update = next(c for c in record["tool_calls"] if c["tool"] == "update_task")
-    assert update["ok"] is True
+    create = next(c for c in record["tool_calls"] if c["tool"] == "create_task")
+    assert create["ok"] is True
 
 
 def test_empty_trajectory_stop_reason_is_no_tool_call():
@@ -711,10 +745,9 @@ def test_aggregate_has_pass_at_k_and_pass_all_k_honest(tmp_path):
         transcripts_dir=str(tmp_path),
     )
     assert agg["pass_at_k"] == pytest.approx(1.0)
-    assert agg["pass_all_k"] == pytest.approx(1.0)
 
 
-def test_aggregate_has_pass_at_k_and_pass_all_k_lazy(tmp_path):
+def test_aggregate_has_pass_at_k_lazy(tmp_path):
     agg = run_trials(
         PRIMARY,
         trials=3,
@@ -724,7 +757,6 @@ def test_aggregate_has_pass_at_k_and_pass_all_k_lazy(tmp_path):
         transcripts_dir=str(tmp_path),
     )
     assert agg["pass_at_k"] == pytest.approx(0.0)
-    assert agg["pass_all_k"] == pytest.approx(0.0)
 
 
 def test_pass_at_k_formula_is_correct():
@@ -791,7 +823,7 @@ def test_summary_json_has_aggregate_metrics(tmp_path):
         transcripts_dir=str(tmp_path),
     )
     summary = json.loads((Path(agg["run_dir"]) / "summary.json").read_text())
-    for key in ("success_rate", "pass_at_k", "pass_all_k",
+    for key in ("success_rate", "pass_at_k",
                 "failure_stage_counts", "stop_reason_counts"):
         assert key in summary, f"summary.json missing key: {key}"
 
@@ -810,7 +842,7 @@ def _noop_client() -> ScriptedClient:
 def test_sweep_writes_index_json(tmp_path):
     runs_dir = str(tmp_path / "runs")
     run_sweep(
-        task_ids=["baseline_slack", "primary_xservice"],
+        task_ids=["smoke_test", "vendor_reconcile"],
         trials=1,
         model=MODEL,
         client=_noop_client(),
@@ -826,7 +858,7 @@ def test_sweep_writes_index_json(tmp_path):
 def test_sweep_index_has_task_list_and_model(tmp_path):
     runs_dir = str(tmp_path / "runs")
     run_sweep(
-        task_ids=["baseline_slack", "primary_xservice"],
+        task_ids=["smoke_test", "vendor_reconcile"],
         trials=1,
         model=MODEL,
         client=_noop_client(),
@@ -836,14 +868,14 @@ def test_sweep_index_has_task_list_and_model(tmp_path):
     )
     sweep_dirs = list(Path(runs_dir).glob("sweep_*"))
     index = json.loads((sweep_dirs[0] / "index.json").read_text())
-    assert index["tasks"] == ["baseline_slack", "primary_xservice"]
+    assert index["tasks"] == ["smoke_test", "vendor_reconcile"]
     assert index["model"] == MODEL
 
 
 def test_sweep_writes_comparison_json(tmp_path):
     runs_dir = str(tmp_path / "runs")
     run_sweep(
-        task_ids=["baseline_slack", "primary_xservice"],
+        task_ids=["smoke_test", "vendor_reconcile"],
         trials=1,
         model=MODEL,
         client=_noop_client(),
@@ -858,7 +890,7 @@ def test_sweep_writes_comparison_json(tmp_path):
 def test_sweep_comparison_has_both_tasks(tmp_path):
     runs_dir = str(tmp_path / "runs")
     run_sweep(
-        task_ids=["baseline_slack", "primary_xservice"],
+        task_ids=["smoke_test", "vendor_reconcile"],
         trials=1,
         model=MODEL,
         client=_noop_client(),
@@ -870,7 +902,7 @@ def test_sweep_comparison_has_both_tasks(tmp_path):
     comparison = json.loads((sweep_dirs[0] / "comparison.json").read_text())
     assert len(comparison["tasks"]) == 2
     for entry in comparison["tasks"]:
-        for key in ("task", "success_rate", "pass_at_k", "pass_all_k"):
+        for key in ("task", "success_rate", "pass_at_k"):
             assert key in entry, f"comparison entry missing key: {key}"
 
 
@@ -881,9 +913,9 @@ def test_sweep_comparison_has_both_tasks(tmp_path):
 
 def test_two_independent_trials_both_score_1_0():
     # If state is reset between trials, both honest runs must score 1.0.
-    # If state carried over, the second run would find T003 already in_progress,
-    # which would still satisfy assertion 1 but the post would be a second one,
-    # violating ALLOWED_CHANGES budget and causing no_collateral_damage to fail.
+    # If state carried over, the second run would create a second task and post a
+    # second message, violating the ALLOWED_CHANGES budget (1 task, 1 message in C009)
+    # and causing no_collateral_damage to fail.
     module = get_task(PRIMARY)
     r1 = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)
     r2 = run_one_trial(module, MODEL, honest_primary_client(), max_turns=10)

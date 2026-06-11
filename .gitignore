@@ -10,4 +10,7 @@ trajectories/
 transcripts/
 # throwaway scratch (gate runners, experiments)
 scratch/
+tasks/_experimental/
 .DS_Store
+# private knowledge dump -- not for repo
+for_akshat/

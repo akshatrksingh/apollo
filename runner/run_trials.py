@@ -333,7 +333,6 @@ def _write_summary(
         "tool_schemas": tool_schemas,
         "success_rate": aggregate["success_rate"],
         "pass_at_k": aggregate["pass_at_k"],
-        "pass_all_k": aggregate["pass_all_k"],
         "mean_score": aggregate["mean"],
         "scores": aggregate["scores"],
         "distribution": {str(k): v for k, v in aggregate["distribution"].items()},
@@ -382,7 +381,6 @@ def run_trials(
         sum(1 for s in scores if s == 1.0) / len(scores) if scores else 0.0
     )
     pass_at_k = 1.0 - (1.0 - success_rate) ** trials if trials else 0.0
-    pass_all_k = success_rate ** trials if trials else 0.0
 
     assertion_names: list[str] = []
     for r in records:
@@ -416,7 +414,6 @@ def run_trials(
         "mean": mean,
         "success_rate": success_rate,
         "pass_at_k": pass_at_k,
-        "pass_all_k": pass_all_k,
         "per_assertion_pass_rate": per_assertion_pass_rate,
         "failure_stage_counts": failure_stage_counts,
         "stop_reason_counts": stop_reason_counts,
@@ -442,7 +439,7 @@ def _print_summary(agg: dict) -> None:
         print(f"  {score:.2f}: {agg['distribution'][score]}")
     print(
         f"mean={agg['mean']:.3f}  success_rate={agg['success_rate']:.3f}"
-        f"  pass@k={agg['pass_at_k']:.3f}  pass^k={agg['pass_all_k']:.3f}"
+        f"  pass@k={agg['pass_at_k']:.3f}"
     )
     print("per-assertion pass rate:")
     for name, rate in agg["per_assertion_pass_rate"].items():
@@ -489,7 +486,6 @@ def run_sweep(
                 "task": agg["task"],
                 "success_rate": agg["success_rate"],
                 "pass_at_k": agg["pass_at_k"],
-                "pass_all_k": agg["pass_all_k"],
                 "per_assertion_pass_rate": agg["per_assertion_pass_rate"],
                 "failure_stage_counts": agg["failure_stage_counts"],
                 "stop_reason_counts": agg["stop_reason_counts"],

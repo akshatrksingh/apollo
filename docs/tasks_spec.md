@@ -137,3 +137,83 @@ Verifier assertions (2 assertions):
 | 2 | agent output signals refusal/absence `[PLACEHOLDER: detection method — substring check on final message, or a single LLM-judge call per verifier_design.md]` |
 
 Reuses Task 3 utilities; only the seed field and the assertions differ.
+
+---
+
+## Task 4 -- vendor_reconcile  (cross-world, 12 hops, unsaturated, Gemma ~0.2 success_rate)
+
+Purpose: multi-hop assembly task. Agent must gather scattered payment amounts from several channels, apply one explicit correction, ignore missing data for a third vendor, disambiguate two people sharing a first name, identify the correct owner, create a task, and reply in the right thread. Difficulty comes from world construction, not instruction wording.
+
+Seeds on top of `rich_workspace()` from `env/seed_rich.py` (13 users, 8 channels, 63 messages, 15 tasks as the baseline world).
+
+INSTRUCTION:
+> Finance flagged that one of our vendor payments this month doesn't reconcile. Figure out which vendor was short-paid, open a task for the right person to fix it, and reply in the finance lead's thread to confirm. If the numbers actually check out, don't create anything, just say so in the thread.
+
+Seed delta (layered on top of `rich_workspace()`):
+
+| id | what | detail |
+|----|------|--------|
+| U014 | Sam Wells, role=finance | Finance lead. Same first name as Sam Okello (U012, engineer) -- disambiguation trap. |
+| C009 | #finance, private | Members: Sam Wells, Alice Chen, Agent (U004). Agent must discover this channel via `list_channels`. |
+| M064 | Finance flag (THREAD ROOT) | Sam Wells in C009: "month-end vendor run complete, three vendors, at least one discrepancy, payments engineer please investigate". Required reply target. |
+| M065 | Alice ack (reply to M064) | Filler -- Alice says she will follow up. |
+| M066 | Acme payment WRONG amount | Carol Diaz in C004: "Acme Corp disbursement went out: $4,200." -- incorrect figure. |
+| M067 | Acme correction (reply to M066) | Bob Kim in C004: "wrong -- actual was $2,400, not $4,200. My mistake." -- must use corrected value. |
+| M068 | Brightline payment SHORT | Carol Diaz in C004: "Brightline payment: $2,200 confirmed." -- vs expected $2,400. |
+| M069 | Brightline API decoy | Sam Okello (U012) in C002: mentions Brightline re: API contract terms -- NOT a payment message. |
+| M070 | Acme casual filler | Lena Vogel in C007: "glad the Acme setup is done." -- irrelevant. |
+| M071 | Expected amounts + owner hint | Sam Wells in C009: "Acme $2,400, Brightline $2,400, Cloudmesh pending. For corrections, Bob on the payments team is the one to loop in." |
+| M072 | Cloudmesh not billed trap | Finn Torres in C003: "Cloudmesh hasn't invoiced us yet." -- absence is not short-payment. |
+| M073 | Cloudmesh queued trap | Carol Diaz in C004: "Added Cloudmesh to the payment queue -- no transfer yet." |
+| M074 | Sam Okello payments misdirection | Sam Okello in C001: "finance keeps pinging me about payments, not my area." -- name trap. |
+
+Key puzzle elements:
+- **Correction**: Acme posted as $4,200, corrected to $2,400 in M067 reply (must use M067, not M066)
+- **Missing data trap**: Cloudmesh expected $1,800 but no payment confirmation -- absence is not evidence of short-payment
+- **Two Sams**: Sam Wells (U014, finance) vs Sam Okello (U012, engineer) -- reply must go to Wells's thread, task must NOT be assigned to Okello
+- **Two Bobs**: Bob Kim (U002, in C004 payments-team) vs Bob Park (U008, NOT in C004) -- hint "Bob on the payments team" in M071 requires disambiguation via C004 membership
+- **Correct answer**: Brightline short-paid by $200 ($2,200 paid vs $2,400 contracted); task assigned to Bob Kim (U002)
+
+Minimum honest path (12 hops):
+1. `list_channels()` -- discover C009 (finance channel)
+2. `get_channel_messages("C009")` -- read finance flag M064 and expected amounts M071
+3. `get_thread("M064")` -- confirm thread to reply to
+4. `search_messages("Acme")` -- find M066 ($4,200 wrong)
+5. `get_thread("M066")` -- find M067 correction ($2,400)
+6. `search_messages("Brightline")` -- find M068 ($2,200) and M069 (decoy)
+7. `search_messages("Cloudmesh")` -- find M072/M073 (no payment -- trap, skip)
+8. `get_channel_messages("C004")` -- corroborate amounts in payments-team context
+9. `list_users()` -- resolve Bob Kim (U002) vs Sam Okello (U012) vs Sam Wells (U014) vs Bob Park (U008)
+10. `get_channel_messages("C003")` -- confirm Cloudmesh context
+11. `create_task(title=..., description=..., assignee="U002")` -- Brightline task for Bob Kim
+12. `post_message("C009", parent_id="M064", text="...Brightline...confirm...")` -- thread reply naming vendor
+
+Verifier assertions (5 assertions, binary AND-scored -> `{0.0, 1.0}`):
+
+| # | name | condition |
+|---|------|-----------|
+| 1 | `brightline_task_created` | a new task (not in `state_before.tasks`) exists whose `title + description` contains "brightline" (case-insensitive) |
+| 2 | `task_assigned_to_payments_engineer` | that task's `assignee == "U002"` (Bob Kim) |
+| 3 | `reply_in_finance_thread` | a new message exists with `channel=="C009"`, `author==current_user`, `parent_id=="M064"`, `ts > episode_start` |
+| 4 | `reply_names_brightline` | that message's text contains "brightline" (case-insensitive); minimal content check justified because the reply is the communicative confirmation |
+| 5 | `no_collateral_damage` | `no_collateral_damage(before, after, ALLOWED_CHANGES)` |
+
+ALLOWED_CHANGES:
+```
+{
+  "tasks":    {"added": 1},
+  "messages": {"added": {"C009": 1}}
+}
+```
+
+Exploit desk-check (all -> 0.0 under binary scoring):
+| exploit | a1 | a2 | a3 | a4 | a5 | score |
+|---------|----|----|----|----|-----|-------|
+| do-nothing | F | F | F | F | T | 0.0 |
+| correct vendor, wrong assignee (Sam Okello U012) | T | F | T | T | T | 0.0 |
+| correct vendor, wrong assignee (Bob Park U008) | T | F | T | T | T | 0.0 |
+| wrong vendor (Acme), correct assignee | F | F | T | F | T | 0.0 |
+| correct task, top-level reply in C009 (not thread) | T | T | F | F | T | 0.0 |
+| correct task, reply in wrong channel | T | T | F | F | F | 0.0 |
+| correct task + assignee, reply omits vendor name | T | T | T | F | T | 0.0 |
+| honest 12-hop path | T | T | T | T | T | 1.0 |

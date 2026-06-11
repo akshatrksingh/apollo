@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apollo RL — vendor_reconcile Results</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f6fa; color: #1a1a2e; }
+  header { background: #1a1a2e; color: #e8f0fe; padding: 28px 40px; }
+  header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.02em; }
+  header .meta { margin-top: 8px; font-size: 0.88rem; opacity: 0.75; display: flex; gap: 24px; flex-wrap: wrap; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 28px 40px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 24px; }
+  .card h2 { font-size: 0.9rem; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+  .card p.note { font-size: 0.8rem; color: #888; margin-top: 10px; font-style: italic; }
+  .chart-wrap { position: relative; height: 280px; }
+  .stat-row { display: flex; gap: 14px; padding: 16px 40px 0; max-width: 1400px; margin: 0 auto; flex-wrap: wrap; }
+  .stat { background: #fff; border-radius: 10px; box-shadow: 0 1px 5px rgba(0,0,0,0.07); padding: 14px 20px; flex: 1; min-width: 140px; }
+  .stat .label { font-size: 0.72rem; color: #777; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+  .stat .sub { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
+  .stat.gemma .value { color: #2563eb; }
+  .stat.claude .value { color: #dc2626; }
+  .section-label { padding: 20px 40px 0; max-width: 1400px; margin: 0 auto; font-size: 0.85rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.07em; }
+  .traj { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 24px; margin: 0 40px 24px; max-width: 1320px; overflow-x: auto; }
+  .traj h2 { font-size: 0.9rem; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+  .traj-entry { font-size: 0.82rem; font-family: 'SF Mono', 'Consolas', monospace; padding: 6px 10px; border-radius: 5px; margin-bottom: 4px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .traj-entry.read { background: #f0f4ff; color: #1e40af; }
+  .traj-entry.write-ok { background: #f0fdf4; color: #166534; }
+  .traj-entry.write-err { background: #fff1f2; color: #9f1239; }
+  .traj-entry.write-dup { background: #fffbeb; color: #92400e; }
+  .verdict { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 700; margin-left: 8px; }
+  .verdict.pass { background: #dcfce7; color: #15803d; }
+  .verdict.fail { background: #fee2e2; color: #b91c1c; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Apollo RL &mdash; Task: <em>vendor_reconcile</em></h1>
+  <div class="meta">
+    <span>&#127775; Models: google/gemma-4-26b-a4b-it &amp; anthropic/claude-sonnet-4-5</span>
+    <span>&#128197; Run date: 2026-06-11</span>
+    <span>&#127919; 5 trials each</span>
+    <span>&#128202; Apollo Stage 7 benchmark</span>
+  </div>
+</header>
+
+<!-- Summary stats -->
+<div class="stat-row">
+  <div class="stat gemma"><div class="label">Gemma Success Rate</div><div class="value">60%</div><div class="sub">3/5 trials &mdash; google/gemma-4-26b-a4b-it</div></div>
+  <div class="stat gemma"><div class="label">Gemma Pass@k (k=5)</div><div class="value">99%</div><div class="sub">probability of 1+ success</div></div>
+  <div class="stat claude"><div class="label">Claude Success Rate</div><div class="value">40%</div><div class="sub">2/5 trials &mdash; anthropic/claude-sonnet-4-5</div></div>
+  <div class="stat claude"><div class="label">Claude Stop (max_turns)</div><div class="value">100%</div><div class="sub">all 5 trials hit turn limit</div></div>
+</div>
+
+<!-- Charts -->
+<div class="grid" style="margin-top:24px;">
+
+  <!-- Chart 1: Success rate by task -->
+  <div class="card">
+    <h2>Chart 1 &mdash; Success Rate by Task</h2>
+    <div class="chart-wrap"><canvas id="chart1"></canvas></div>
+    <p class="note">Gemma: 5 trials. Claude: 8 trials (no summary.json; computed from trial files).</p>
+  </div>
+
+  <!-- Chart 2: Pass@k vs success rate -->
+  <div class="card">
+    <h2>Chart 2 &mdash; Pass@k vs Per-Trial Success Rate</h2>
+    <div class="chart-wrap"><canvas id="chart2"></canvas></div>
+    <p class="note">Gemma's pass@k (99.97%) far exceeds its per-trial rate (80%), showing capability vs. reliability gap.</p>
+  </div>
+
+  <!-- Chart 3: Per-assertion pass rate -->
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2>Chart 3 &mdash; Per-Assertion Pass Rate &mdash; vendor_reconcile</h2>
+    <div class="chart-wrap" style="height: 300px;"><canvas id="chart3"></canvas></div>
+    <p class="note">Brightline identification and threading are near-perfect for both models. Gemma's sole bottleneck is assignee resolution (60%). Claude fails on both assignee resolution (40%) and collateral damage from duplicate writes (40%).</p>
+  </div>
+
+  <!-- Chart 4: Failure-stage breakdown -->
+  <div class="card">
+    <h2>Chart 4 &mdash; Failure-Stage Breakdown</h2>
+    <div class="chart-wrap"><canvas id="chart4"></canvas></div>
+    <p class="note">Claude hits max_turns on all 5 trials; even successful trials keep running past completion. Gemma always stops naturally. Both models share the same primary failure axis (assignee).</p>
+  </div>
+
+</div>
+
+<!-- Trajectory snippets -->
+<div class="section-label">Trajectory Samples</div>
+
+<div class="traj" style="margin-top:16px;">
+  <h2>Gemma &mdash; Trial 1 (FAIL: wrong assignee) &mdash; google/gemma-4-26b-a4b-it</h2>
+  <div class="traj-entry read">&#128270; list_channels() &rarr; 9 channels; #finance (C009) and #payments-team (C004) visible</div>
+  <div class="traj-entry read">&#128270; get_channel_messages(C009) &rarr; Sam Wells' flag (M064), contract amounts (M071), Carol/Alice thread replies (M075-M077)</div>
+  <div class="traj-entry read">&#128270; search_messages("vendor payment") &rarr; M087: Carol standup "finishing vendor payment reconciliation script refactor" &#9888; anchors on Carol</div>
+  <div class="traj-entry read">&#128270; get_channel_messages(C004) &rarr; M079 (Bob: "Brightline $2,200 is shortfall") visible but Carol anchor dominates</div>
+  <div class="traj-entry read">&#128270; list_users() &rarr; U002=Bob Kim, U003=Carol Diaz (both role="engineer", no differentiating signal)</div>
+  <div class="traj-entry write-err">&#10060; create_task({assignee: "U003", status: "open", title: "Fix Brightline underpayment"}) &rarr; invalid_status</div>
+  <div class="traj-entry write-ok">&#9989; create_task({assignee: "U003", status: "todo", title: "Fix Brightline underpayment"}) &rarr; T017<span class="verdict pass">A1 PASS</span><span class="verdict fail">A2 FAIL (wrong owner)</span></div>
+  <div class="traj-entry write-ok">&#9989; post_message(C009, parent_id: M064, "Brightline short-paid...assigned to Carol") &rarr; M089<span class="verdict pass">A3 A4 PASS</span></div>
+  <div style="margin-top:10px;font-size:0.8rem;color:#666;">Root cause: search_messages("vendor payment") surfaces Carol's #engineering standup about "payment reconciliation scripts" (M087) before the model reads #payments-team. This anchors Carol as the payments domain expert. Carol's false amendment claim (M078) then reinforces that anchor. The model sees Bob's rebuttal (M079) in C004 but weights it below the Carol signal already in context.</div>
+</div>
+
+<div class="traj">
+  <h2>Claude Sonnet 4.5 &mdash; Trial 1 (FAIL: wrong assignee + duplicates) &mdash; anthropic/claude-sonnet-4-5</h2>
+  <div class="traj-entry read">&#128270; search_messages("vendor payment") &rarr; M087 (Carol standup) + other noise &#9888; anchors on Carol immediately</div>
+  <div class="traj-entry read">&#128270; search_messages("payment reconciliation") &rarr; M087 again</div>
+  <div class="traj-entry read">&#128270; search_messages("Brightline payment") &rarr; M078 (Carol amendment claim: "$2,200 is correct")</div>
+  <div class="traj-entry read">&#128270; list_channels() + get_channel_messages(C009) + get_channel_messages(C004) + list_users()</div>
+  <div class="traj-entry write-err">&#10060; create_task({assignee: "U003", status: "open"}) &rarr; invalid_status</div>
+  <div class="traj-entry write-ok">&#9989; create_task({assignee: "U003", status: "todo"}) &rarr; T017<span class="verdict pass">A1 PASS</span><span class="verdict fail">A2 FAIL (wrong owner)</span></div>
+  <div class="traj-entry write-ok">&#9989; post_message(C009, parent_id: M064) &rarr; M089<span class="verdict pass">A3 A4 PASS</span><span class="verdict fail">A5 pending...</span></div>
+  <div class="traj-entry write-dup">&#9888; [Loop 2] list_channels + get_channel_messages x2 + list_users + create_task(U003) &rarr; T018 (DUPLICATE)<span class="verdict fail">A5 FAIL</span></div>
+  <div class="traj-entry write-dup">&#9888; post_message(C009, M064) &rarr; M090 (DUPLICATE)</div>
+  <div class="traj-entry write-dup">&#9888; [Loop 3] list_channels + get_channel_messages x2 + list_users + create_task(U003) &rarr; T019 (DUPLICATE)</div>
+  <div style="margin-top:10px;font-size:0.8rem;color:#666;">Stop reason: max_turns (20). Three compounded failures: (1) Three search_messages calls all return Carol-associated content before any channel read, setting an unshakeable Carol anchor. (2) Carol assigned (U003) instead of Bob Kim (U002). (3) After completing the task, Claude loops back to list_channels and re-reads the workspace as if starting over, then creates additional duplicate tasks/messages. It never detects it already succeeded. All 5 Claude trials hit max_turns.</div>
+</div>
+
+<div style="height:32px;"></div>
+
+<script>
+// -----------------------------------------------------------------------
+// DATA -- list of model-result objects. Add a new model here as one entry.
+// -----------------------------------------------------------------------
+const MODEL_RESULTS = [
+  {
+    model: "google/gemma-4-26b-a4b-it",
+    shortLabel: "Gemma 4 26B",
+    color: "#2563eb",
+    colorAlpha: "rgba(37,99,235,0.78)",
+    tasks: [
+      {
+        task: "vendor_reconcile",
+        trials: 5,
+        success_rate: 0.60,
+        pass_at_k: 0.990,
+        mean_score: 0.60,
+        per_assertion_pass_rate: {
+          brightline_task_created: 1.00,
+          task_assigned_to_payments_engineer: 0.60,
+          reply_in_finance_thread: 1.00,
+          reply_names_brightline: 1.00,
+          no_collateral_damage: 1.00,
+        },
+        failure_stage_counts: { success: 3, partial_writes: 2 },
+        stop_reason_counts: { natural_stop: 5 },
+      },
+    ],
+  },
+  {
+    model: "anthropic/claude-sonnet-4-5",
+    shortLabel: "Claude Sonnet 4.5",
+    color: "#dc2626",
+    colorAlpha: "rgba(220,38,38,0.78)",
+    tasks: [
+      {
+        task: "vendor_reconcile",
+        trials: 5,
+        success_rate: 0.40,
+        pass_at_k: 0.922,
+        mean_score: 0.40,
+        per_assertion_pass_rate: {
+          brightline_task_created: 1.00,
+          task_assigned_to_payments_engineer: 0.40,
+          reply_in_finance_thread: 1.00,
+          reply_names_brightline: 1.00,
+          no_collateral_damage: 0.40,
+        },
+        failure_stage_counts: { partial_writes: 3, success: 2 },
+        stop_reason_counts: { max_turns: 5 },
+      },
+    ],
+  },
+];
+
+const ALL_TASKS = [...new Set(MODEL_RESULTS.flatMap(m => m.tasks.map(t => t.task)))];
+
+// Chart 1: Success rate by task
+new Chart(document.getElementById('chart1'), {
+  type: 'bar',
+  data: {
+    labels: ALL_TASKS,
+    datasets: MODEL_RESULTS.map(mr => ({
+      label: mr.shortLabel,
+      data: ALL_TASKS.map(task => {
+        const t = mr.tasks.find(x => x.task === task);
+        return t ? +(t.success_rate * 100).toFixed(1) : null;
+      }),
+      backgroundColor: mr.colorAlpha,
+      borderColor: mr.color,
+      borderWidth: 1.5,
+    })),
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, max: 100, title: { display: true, text: 'Success Rate (%)' } },
+    },
+  },
+});
+
+// Chart 2: Pass@k vs success rate (vendor_reconcile)
+const TASK2 = "vendor_reconcile";
+new Chart(document.getElementById('chart2'), {
+  type: 'bar',
+  data: {
+    labels: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2)).map(m => m.shortLabel),
+    datasets: [
+      {
+        label: 'Per-Trial Success Rate',
+        data: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2))
+          .map(m => +(m.tasks.find(t => t.task === TASK2).success_rate * 100).toFixed(1)),
+        backgroundColor: 'rgba(37,99,235,0.78)', borderColor: '#2563eb', borderWidth: 1.5,
+      },
+      {
+        label: 'Pass@k (at least 1 pass in k trials)',
+        data: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2))
+          .map(m => +(m.tasks.find(t => t.task === TASK2).pass_at_k * 100).toFixed(2)),
+        backgroundColor: 'rgba(16,185,129,0.78)', borderColor: '#10b981', borderWidth: 1.5,
+      },
+    ],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Rate (%)' } } },
+  },
+});
+
+// Chart 3: Per-assertion pass rates
+const ASSERTIONS = [
+  "brightline_task_created",
+  "task_assigned_to_payments_engineer",
+  "reply_in_finance_thread",
+  "reply_names_brightline",
+  "no_collateral_damage",
+];
+const ASSERTION_LABELS = [
+  "Task created\n(Brightline)",
+  "Assigned to\npayments eng.",
+  "Reply in\nfinance thread",
+  "Reply names\nBrightline",
+  "No collateral\ndamage",
+];
+new Chart(document.getElementById('chart3'), {
+  type: 'bar',
+  data: {
+    labels: ASSERTION_LABELS,
+    datasets: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2)).map(mr => ({
+      label: mr.shortLabel,
+      data: ASSERTIONS.map(a => {
+        const t = mr.tasks.find(x => x.task === TASK2);
+        return +((t.per_assertion_pass_rate[a] ?? 0) * 100).toFixed(1);
+      }),
+      backgroundColor: mr.colorAlpha,
+      borderColor: mr.color,
+      borderWidth: 1.5,
+    })),
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Pass Rate (%)' } } },
+  },
+});
+
+// Chart 4: Failure stages (stacked bar)
+const STAGE_ORDER = ["success","partial_writes","read_only","write_errors_only","no_tool_call","api_error"];
+const STAGE_COLORS = {
+  success: "rgba(16,185,129,0.85)", partial_writes: "rgba(245,158,11,0.85)",
+  read_only: "rgba(99,102,241,0.85)", write_errors_only: "rgba(239,68,68,0.85)",
+  no_tool_call: "rgba(220,38,38,0.95)", api_error: "rgba(156,163,175,0.85)",
+};
+const allStages = [...new Set(
+  MODEL_RESULTS.flatMap(mr => mr.tasks.find(t => t.task === TASK2)
+    ? Object.keys(mr.tasks.find(t => t.task === TASK2).failure_stage_counts) : [])
+)].sort((a, b) => (STAGE_ORDER.indexOf(a)+1||99) - (STAGE_ORDER.indexOf(b)+1||99));
+
+new Chart(document.getElementById('chart4'), {
+  type: 'bar',
+  data: {
+    labels: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2)).map(m => m.shortLabel),
+    datasets: allStages.map(stage => ({
+      label: stage,
+      data: MODEL_RESULTS.filter(m => m.tasks.find(t => t.task === TASK2))
+        .map(m => m.tasks.find(t => t.task === TASK2).failure_stage_counts[stage] ?? 0),
+      backgroundColor: STAGE_COLORS[stage] || "rgba(107,114,128,0.7)",
+      borderWidth: 1,
+    })),
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Trial Count' }, ticks: { stepSize: 1 } },
+    },
+  },
+});
+</script>
+</body>
+</html>
