@@ -1,0 +1,355 @@
+{
+  "task": "vendor_reconcile",
+  "model": "anthropic/claude-sonnet-4-5",
+  "trials": 5,
+  "system_prompt": "You are an operator working inside a workspace with Slack-like and task-management tools. Use the provided tools to accomplish the user's request. Call tools to inspect state before acting. When the task is complete, stop calling tools.",
+  "tool_schemas": [
+    {
+      "name": "list_channels",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "get_channel_messages",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "channel_id"
+        ]
+      }
+    },
+    {
+      "name": "post_message",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "channel_id",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "update_message",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "add_reaction",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string",
+            "description": "Emoji name with or without surrounding colons, e.g. 'eyes' or ':eyes:'. Both forms are accepted."
+          }
+        },
+        "required": [
+          "message_id",
+          "emoji"
+        ]
+      }
+    },
+    {
+      "name": "create_channel",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "is_private": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "search_messages",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_thread",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ]
+      }
+    },
+    {
+      "name": "list_users",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "add_member",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "user_id"
+        ]
+      }
+    },
+    {
+      "name": "create_task",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "assignee": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "assignee"
+        ]
+      }
+    },
+    {
+      "name": "get_task",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "delete_task",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "list_tasks",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "assignee": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "update_task",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "assignee": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "slack_message_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "task_id"
+        ]
+      }
+    },
+    {
+      "name": "search_tasks",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assignee": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slack_message_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "success_rate": 0.4,
+  "pass_at_k": 0.9222400000000001,
+  "mean_score": 0.4,
+  "scores": [
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "distribution": {
+    "0.0": 3,
+    "1.0": 2
+  },
+  "per_assertion_pass_rate": {
+    "brightline_task_created": 1.0,
+    "task_assigned_to_payments_engineer": 0.4,
+    "reply_in_finance_thread": 1.0,
+    "reply_names_brightline": 1.0,
+    "no_collateral_damage": 0.4
+  },
+  "failure_stage_counts": {
+    "partial_writes": 3,
+    "success": 2
+  },
+  "stop_reason_counts": {
+    "max_turns": 5
+  },
+  "trial_files": [
+    "trial_01.json",
+    "trial_02.json",
+    "trial_03.json",
+    "trial_04.json",
+    "trial_05.json"
+  ],
+  "created_at": "2026-06-11T01:39:51.556045+00:00"
+}
