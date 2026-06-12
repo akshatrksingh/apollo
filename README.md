@@ -68,7 +68,7 @@ Both the target model (Gemma 4 26B) and a stronger reference model (Claude Sonne
 ## Deliverables
 
 - **Client update** -- [client_update.pdf](deliverables/client_update.pdf)
-- **Loss analysis** -- [loss_analysis.md](deliverables/loss_analysis.md)
+- **Loss analysis** -- [loss_analysis.pdf](deliverables/loss_analysis.pdf)
 
 ## How to run
 
